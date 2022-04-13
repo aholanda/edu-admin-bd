@@ -1,0 +1,102 @@
+@chapter  Isolamento de Transação 
+
+O isolamento de transação permite ao usuário controlar o que é visto
+dentro de uma transação. Vamos supor que dois usuários estejam acessam
+a mesma tabela ao mesmo tempo. Se o usuário 1 estiver gerando um
+relatório, qualquer alteração realizada pelo usuário 2 pode afetar os
+valores subsequentes a serem relatados gerando inconsistências, como
+demonstrado a seguir:
+
+@example
+CREATE TABLE it_teste (saldo int);
+INSERT INTO it_teste VALUES (4), (5);
+@end example
+
+@example
+@multitable @columnfractions .48 .48
+@headitem Usuário 1
+@tab Usuário 2
+@item BEGIN;
+@tab
+@item SELECT sum(saldo) FROM it_teste;
+@tab
+@item  sum
+@tab
+@item  -----
+@tab
+@item 9
+@tab
+@item  (1 row)
+@tab
+@item
+@tab  INSERT INTO it_teste VALUES (6);
+@item SELECT sum(saldo) FROM it_teste;
+@tab
+@item sum
+@tab	 
+@item  -----
+@tab
+@item 15
+@tab
+@item (1  row)
+@tab
+@item COMMIT;
+@tab        
+@end multitable
+@end example
+
+Devido a falta de isolamento da transação do usuário 1, a alteração
+feita pelo usuário 2 modifica o saldo visto pelo usuário 1.
+
+Para garantir que uma transação não modifique sua visão da tabela, o
+modo **REPEATABLE READ** deve ser usado, conforme mostrado a seguir:
+
+@example
+@multitable @columnfractions .48 .48
+@headitem Usuário 1
+@tab Usuário 2
+@item BEGIN TRANSACTION ISOLATION LEVEL
+@tab
+@item  REPEATABLE READ;
+@tab
+@item SELECT sum(saldo) FROM it_teste;
+@tab
+@item sum
+@tab
+@item  -----
+@tab
+@item 15 
+@tab
+@item (1 row)
+@tab
+@item
+@tab INSERT INTO it_teste VALUES (20);
+@item SELECT sum(saldo) FROM it_teste;
+@tab
+@item  sum 
+@tab
+@item -----
+@tab
+@item 15
+@tab
+@item (1 row)
+@tab
+@item COMMIT;
+@tab
+@end multitable
+@end example
+
+Mesmo que o usuário 2 altere os valores da tabela @code{it_teste},
+estas alterações não refletem na visão que o usuário 1 tem da
+tabela. Além disso, não há nenhuma degradação de performance devido ao
+uso de @code{REPEATABLE READ}. Porém, o usuário 1 deverá sempre
+lembrar que seus dados não estarão atualizados.
+
+@unnumberedsec Exercícios
+
+@enumerate
+@item O @value{pg} possui mais um nível de isolamento chamado @code{SERIALIZABLE},
+explique a diferença entre este nível e @code{REPEATABLE READ}. Execute o exemplo
+desta seção usando @code{BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE}, e verifique se há
+diferença com relação aos valores lidos.
+@end enumerate

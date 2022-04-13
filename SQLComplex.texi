@@ -1,0 +1,505 @@
+@chapter Consultas SQL mais complexas
+
+@b{Arquivo:} @uref{@value{urlbase}/empresa.sql,empresa.sql}
+
+@section Comparações envolvendo @code{NULL}
+
+@c desconhecido
+@c não sabe o CEP, indisponível
+@c nome cônjuge, não se aplica
+
+Valores nulos indicam que o valor é desconhecido ou que está
+indisponível ou que não é aplicável. Para testar se um valor é nulo os
+operadores especiais @code{IS NULL} e @code{IS NOT NULL} devem ser
+usados.
+
+@b{N0}. Listar o nome e sobrenome dos funcionários sem supervisor.
+
+@example
+@value{prompt} SELECT nome, sobrenome FROM Funcionario WHERE cpf_supervisor IS NULL;
+@end example
+
+Os operadores relacionais @code{=} e @code{<>} não devem ser
+usados. Expressões Booleanas devem ser analisadas cuidadosamente. A
+tabela a seguir dá o resultado da expressão Booleana com pelo menos um
+operando nulo (desconhecido):
+
+@multitable @columnfractions .15 .20
+@headitem Expressão @tab Resultado
+@item ? @code{AND} ?
+@tab ?
+@item ? @code{OR} ?
+@tab ?
+@item @math{x} @code{AND} ?
+@tab F ou ? (caso @math{x} seja F)
+@item @math{x} @code{OR} ?
+@tab ? ou T (caso @math{x} seja T)
+@end multitable
+
+As tuplas não serão selecionadas pela cláusula @code{WHERE} quando o
+resultado da expressão Booleana for falso ou desconhecido.
+
+@b{N1}. Tentativa @b{incorreta} de listar o nome e sobrenome dos
+funcionários sem supervisor.
+
+@example
+@value{prompt} SELECT nome, sobrenome FROM Funcionario WHERE cpf_supervisor='NULL';
+@end example
+
+@section Junção exterior e junção natural
+
+Além da junção natural de duas tabelas, SQL possui também a @b{junção
+exterior}, que pode pode ser a @b{esquerda} ou a @b{direita} para
+capturar os dados que não atendem à condição da junção da tabela da
+esquerda ou direita, conforme o caso.
+
+Vamos supor que queiramos realizar a seguinte consulta: "Listar o nome de
+cada funcionário, e se for o caso, o nome, parentesco e data de
+nascimento de cada um de seus dependentes". Um junção natural iria listar
+somente os funcionários que tivessem dependentes.
+
+A @b{junção exterior a esquerda} entre @code{Funcionario} e @code{Dependente}
+ (nessa ordem) resolve o problema, com a seguinte consulta SQL:
+
+@example
+@value{prompt} SELECT F.nome, D.nome, parentesco, D.data_nasc
+               FROM Funcionario AS F LEFT JOIN Dependente AS D
+               ON F.cpf=D.cpf_funcionario;
+
+nome   |   nome    | parentesco | data_nasc  
+----------+-----------+------------+------------
+ João     | Paulo     | filho      | 1999-02-15
+ João     | Camila    | filho      | 1997-07-08
+ Maria    | Jaqueline | filho      | 2015-08-02
+ Rudnei   | Rudnei    | filho      | 2011-11-18
+ Rony     | Ronnaldo  | filho      | 2006-03-03
+ Wanda    | Wolnei    | filho      | 2004-01-10
+ Gisele   |           |            | 
+ Alex     |           |            | 
+ Jorge    |           |            | 
+ Lavínia  |           |            | 
+ Camila   |           |            | 
+ Fernando |           |            | 
+ Mauro    |           |            | 
+ Kandir   |           |            | 
+ Karlos   |           |            | 
+ Raoni    |           |            | 
+ Rafael   |           |            | 
+ Rubneia  |           |            | 
+(18 rows)
+
+@end example
+
+Esta consulta listará não só os funcionários com dependentes. Compare
+esta consulta com a junção natural, que retorna somente os funcionários
+que possuem dependentes.
+
+@example
+@value{prompt} SELECT F.nome, D.nome, parentesco, D.data_nasc
+               FROM Funcionario AS F JOIN Dependente AS D
+               ON F.cpf=D.cpf_funcionario;
+
+ nome  |   nome    | parentesco | data_nasc
+--------+-----------+------------+------------
+ João   | Paulo     | filho      | 1999-02-15
+ João   | Camila    | filho      | 1997-07-08
+ Maria  | Jaqueline | filho      | 2015-08-02
+ Rudnei | Rudnei    | filho      | 2011-11-18
+ Rony   | Ronnaldo  | filho      | 2006-03-03
+ Wanda  | Wolnei    | filho      | 2004-01-10
+(6 rows)
+
+@end example
+
+A @b{junção exterior a direita} entre @code{Funcionario} e
+@code{Dependente} trará o mesmo resultado que a junção natural no banco
+de dados @code{EMPRESA}, pois há mais entradas a esquerda do que a
+direita.
+
+@example
+@value{prompt} SELECT F.nome, D.nome, parentesco, D.data_nasc
+               FROM Funcionario AS F RIGHT JOIN Dependente AS D
+               ON F.cpf=D.cpf_funcionario;
+
+nome  |   nome    | parentesco | data_nasc
+--------+-----------+------------+------------
+ João   | Paulo     | filho      | 1999-02-15
+ João   | Camila    | filho      | 1997-07-08
+ Maria  | Jaqueline | filho      | 2015-08-02
+ Rudnei | Rudnei    | filho      | 2011-11-18
+ Rony   | Ronnaldo  | filho      | 2006-03-03
+ Wanda  | Wolnei    | filho      | 2004-01-10
+(6 rows)
+
+@end example
+
+Se quisermos obter os atributos das duas tabelas, independente de haver um
+casamento no atributo de junção, podemos usar o operador @code{FULL JOIN}.
+
+@example
+@value{prompt} SELECT F.nome, D.nome, parentesco, D.data_nasc
+               FROM Funcionario AS F FULL JOIN Dependente AS D
+               ON F.cpf=D.cpf_funcionario;
+
+nome   |   nome    | parentesco | data_nasc  
+----------+-----------+------------+------------
+ João     | Paulo     | filho      | 1999-02-15
+ João     | Camila    | filho      | 1997-07-08
+ Maria    | Jaqueline | filho      | 2015-08-02
+ Rudnei   | Rudnei    | filho      | 2011-11-18
+ Rony     | Ronnaldo  | filho      | 2006-03-03
+ Wanda    | Wolnei    | filho      | 2004-01-10
+ Gisele   |           |            | 
+ Alex     |           |            | 
+ Jorge    |           |            | 
+ Lavínia  |           |            | 
+ Camila   |           |            | 
+ Fernando |           |            | 
+ Mauro    |           |            | 
+ Kandir   |           |            | 
+ Karlos   |           |            | 
+ Raoni    |           |            | 
+ Rafael   |           |            | 
+ Rubneia  |           |            | 
+(18 rows)
+
+@end example
+
+A junção natural e sua forma comumente usada são listadas a seguir:
+
+@example
+@value{prompt} SELECT F.nome, D.nome, parentesco, D.data_nasc
+               FROM Funcionario AS F JOIN Dependente AS D
+               ON F.cpf=D.cpf_funcionario;
+
+               SELECT F.nome, D.nome, parentesco, D.data_nasc
+               FROM Funcionario AS F, Dependente AS D
+               WHERE F.cpf=D.cpf_funcionario;
+
+
+
+nome  |   nome    | parentesco | data_nasc
+--------+-----------+------------+------------
+ João   | Paulo     | filho      | 1999-02-15
+ João   | Camila    | filho      | 1997-07-08
+ Maria  | Jaqueline | filho      | 2015-08-02
+ Rudnei | Rudnei    | filho      | 2011-11-18
+ Rony   | Ronnaldo  | filho      | 2006-03-03
+ Wanda  | Wolnei    | filho      | 2004-01-10
+(6 rows)
+
+@end example
+
+Cada SGBD pode ter alguma variação com relação ao operador de junção, o
+manual de cada SGBD deve ser consulta, se não for o @value{pg}.
+
+@section Consultas aninhadas
+
+Algumas consultas necessitam de uma ou mais consultas prévias sejam
+feitas para gerar um conjunto de tuplas mais adequado para sua
+realização. Este tipo de consulta é chamada @b{consulta aninhada}.
+
+Um exemplo é a consulta a seguir, que retorna o nome e sobrenome dos
+funcionários com salário maior que todos os funcionários do departamento
+1:
+
+@example
+@value{prompt} SELECT nome, sobrenome FROM Funcionario
+        WHERE salario > ALL (SELECT salario 
+                             FROM Funcionario
+                             WHERE id_departamento=1);
+@end example
+
+Usamos o operador @code{IN} quando o resultado da consulta aninhada
+envolver operação de conjuntos (pertinência) sobre as tuplas. Considere
+a consulta a seguir como exemplo.
+
+@b{C}. Recuperar o nome e sobrenome dos funcionários que têm dependentes
+com o mesmo nome e sexo.
+
+@example
+@value{prompt} SELECT F.nome, F.sobrenome FROM Funcionario AS F
+        WHERE F.cpf IN (SELECT D.cpf_funcionario FROM Dependente AS D
+                        WHERE F.nome=D.nome AND F.sexo=D.sexo);
+@end example
+
+Sempre que uma condição da cláusula @code{WHERE} de uma consulta
+aninhada referencia algum atributo de uma relação declarada na consulta
+externa, as duas consultas são consideradas @b{correlacionadas}.
+
+Com isto, a consulta anterior poderia ser reescrita da seguinte maneira:
+
+@example
+@value{prompt} SELECT F.nome, F.sobrenome FROM Funcionario AS F, Dependente AS D
+    WHERE F.cpf=D.cpf_funcionario AND F.sexo=D.sexo AND F.nome=D.nome;
+@end example
+
+@subsection A função @code{EXISTS}
+
+A função @code{EXISTS} é usada para verificar se o resultado de uma
+consulta aninhada é vazio.
+
+@b{C}. Outra maneira de recuperar o nome e sobrenome dos funcionários
+que têm dependentes com o mesmo nome e sexo usando @code{EXISTS}.
+
+@example
+@value{prompt} SELECT F.nome, F.sobrenome FROM Funcionario AS F
+        WHERE EXISTS (SELECT * FROM Dependente AS D
+                      WHERE F.nome=D.nome AND F.sexo=D.sexo);
+@end example
+
+Podemos usar o oposto de relação de existência com @code{NOT
+EXISTS}. Por exemplo, se quisermos listar o nome e sobrenome dos
+funcionarios que não possuem dependentes:
+
+@example
+@value{prompt} SELECT F.nome, F.sobrenome FROM Funcionario AS F
+        WHERE NOT EXISTS (SELECT * FROM Dependente AS D
+                          WHERE F.cpf=D.cpf_funcionario);
+@end example
+
+Usando @code{EXISTS}, as consultas aninhadas podem ser combinadas. Por
+exemplo, se quisermos listar o nome e sobrenome dos gerentes que possuem
+pelo menos um dependente, podemos realizar a consulta:
+
+@example
+@value{prompt} SELECT F.nome, F.sobrenome FROM Funcionario AS F
+        WHERE EXISTS (SELECT * FROM Dependente AS D
+                      WHERE F.cpf=D.cpf_funcionario)
+              AND
+              EXISTS (SELECT * FROM Departamento as D
+                     WHERE F.cpf=D.cpf_gerente);
+@end example
+
+@c @subsection Tabelas de junção e junções externas (@i{outer joins})
+
+@c A @b{tabela de junção} (@b{relação de junção}) foi incorporada na SQL
+@c para permitir especificar um tabela resultante de uma operação de junção
+@c na cláusula @code{FROM} de uma consulta. Por exemplo, a consulta
+
+@c @example
+@c @value{prompt} SELECT F.nome, F.sobrenome, F.endereco FROM
+@c                (Funcionario AS F JOIN Departamento AS D ON D.id=F.id_departamento)
+@c                WHERE D.nome='Desenvolvimento';
+@c @end example
+
+@subsection Agrupamento: as cláusulas @code{GROUP BY} e @code{HAVING}
+
+
+A cláusula @code{GROUP BY} especifica os atributos de agrupamento que
+também devem aparecer no resultado da consulta.
+
+@b{C}. Para cada departamento, recuperar o número do departamento, o
+número de funcionários no departamento e seu salário médio.
+
+@example
+@value{prompt} SELECT id_departamento, COUNT(*), AVG(salario) FROM Funcionario GROUP BY id_departamento;
+@end example
+
+Se houver valor @code{NULL} no atributo do agrupamento, um grupo
+separado é criado para as tuplas com o valor @code{NULL}.
+
+A consulta a seguir mostra como usar um condição de junção na cláusula
+@code{GROUP BY}.
+
+@b{C}. Para cada projeto, recuperar o número do projeto, o nome do
+projeto e o número de funcionários que trabalham neste projeto.
+
+@example
+@value{prompt} SELECT P.id, P.nome, COUNT(*) FROM Projeto as P, Trabalha_em as T WHERE P.id=T.id_projeto
+               GROUP BY P.id, P.nome;
+@end example
+
+A cláusula @code{HAVING} pode aparecer em conjunto com @code{GROUP BY}
+para especificar condições. Por exemplo, veja a consulta:
+
+@b{C}. Para cada projeto em que mais de 3 funcionários trabalham,
+recuperar o número do projeto, o nome do projeto e o número de
+funcionários que trabalham neste projeto.
+
+@example
+@value{prompt} SELECT P.id, P.nome, COUNT(*) FROM Projeto as P, Trabalha_em as T WHERE P.id=T.id_projeto
+               GROUP BY P.id, P.nome
+               HAVING COUNT(*)>3;
+@end example
+
+@subsection Sintaxe @code{SELECT}
+
+O comando @code{SELECT} obedece a sintaxe declarada a seguir onde as cláusulas
+especificadas entre colchetes @code{[...]} são opcionais:
+
+@example
+    @b{SELECT} <lista de atributos ou funções>
+    @b{FROM} <lista de tabelas>
+    [@b{WHERE} <condição>]
+    [@b{GROUP BY} <atributos de agrupamento>]
+    [@b{HAVING} <condição de grupo>]
+    [@b{ORDER BY} <lista de atributos>]
+@end example
+
+
+
+@section Visão (@code{VIEW})
+
+Uma visão é uma tabela virtual derivada de outras tabelas físicas. Ela
+facilita a execução de consultas complexas pela redução de termos na
+consulta. A especificação de visão a seguir é um exemplo.
+
+@b{V1.} Visão chamada @code{TRABALHA_EM1} que lista nome, sobrenome de
+funcionários, bem como, nome do projeto e horas trabalhadas.
+
+@example
+@value{prompt} CREATE VIEW TRABALHA_EM1 AS
+               SELECT F.nome AS nome_funcionario,
+                      F.sobrenome, P.nome AS nome_projeto, T.horas
+               FROM Funcionario AS F, Projeto AS P, Trabalha_em AS T
+               WHERE F.cpf=T.cpf_funcionario AND P.id=T.id_projeto;
+@end example
+
+Para realizar um consulta utilizando a visão basta executar:
+
+@example
+@value{prompt} SELECT * FROM TRABALHA_EM1; -- ou
+@end example
+
+@example
+@value{prompt} SELECT nome_funcionario, nome_projeto FROM TRABALHA_EM1
+               WHERE nome_projeto='Produto A';
+@end example
+
+
+ Uma visão pode especificar quais atributos serão retornados na
+ consulta, como na visão 2.
+
+@b{V2}. A visão @code{DEP_INFO} retorna o nome do departamento, a
+quantidade de funcionários e o total de funcionários.
+
+@example
+@value{prompt} CREATE VIEW DEP_INFO(dep_nome, qtd_func, total_sal) AS
+               SELECT D.nome AS nome_departamento,
+                      COUNT(*), SUM(salario)
+               FROM Departamento AS D, Funcionario AS F
+               WHERE D.id=F.id_departamento
+               GROUP BY D.nome;
+@end example
+
+@b{V3}. O comando @code{DROP VIEW} remove a visão @code{TRABALHA_EM1}.
+
+@example
+@value{prompt} DROP VIEW TRABALHA_EM1;
+@end example
+
+@subsection Atualização de visões
+
+Como as visões são tabelas virtuais, as atualizações deverão ocorrer nas
+tabelas físicas, caso isto não seja possível, as alterações devem ser
+rejeitadas.
+
+@unnumberedsubsubsec Restrições para atualizações de visões
+
+A seguir apresentamos as principais restrições para atualizações de visões, utilizando a
+notação:
+
+U = @code{UPDATE}, I=@code{INSERT}, D=@code{DELETE}
+
+@itemize
+@item
+Colunas calculadas não podem ser atualizadas: (U, I, D) proibidas.
+Exemplo. @code{data_atual - data_nasc}.
+@item
+Visões compostas por funções de agregação ou obtidas via @code{GROUP BY}
+não podem ser atualizadas: (U, I, D) proibidas.
+@item
+Inserções devem incluir todas as colunas @code{NOT NULL} da tabela
+física, ou colunas para as quais um valor @code{DEFAULT} não tenha sido
+definido. Se alguma dessas colunas não fizer parte da visão, nenhumas
+inserção é possível na visão.
+@item
+É ilegal atualizar (U) uma visão formada a partir de uma junção, a menos que colunas de uma
+só tabela física sejam atualizadas.
+@item
+A inserção de uma tupla numa visão pode ser rejeitada caso a tabela
+física tenha coluna com índice tipo @code{UNIQUE INDEX}.
+@end itemize
+
+@section Instruções de alteração de esquema
+
+@unnumberedsubsec O comando @code{DROP}
+
+O comando @code{DROP} é usado para remover elementos nomeados do
+esquema, como tabelas, domínios ou restrições. Também é possível remover
+um esquema como no exemplo a seguir:
+
+@example
+@value{prompt} DROP SCHEMA EMPRESA CASCADE;
+@end example
+
+Se a opção @code{RESTRICT} for escolhida no lugar de @code{CASCADE}, o
+esquema será removido somente se ele não tiver mais elementos; caso
+contrário, o comando @code{DROP} não será executado.
+
+Para remover a tabela @code{Dependente} e seus elementos dependentes,
+tais como chaves estrangeiras e visões, o seguinte comando pode ser
+emitido:
+
+@example
+@value{prompt} DROP TABLE Dependente CASCADE;
+@end example
+
+@unnumberedsubsec O comando @code{ALTER}
+
+A definição de uma tabela ou de outros elementos pode ser modificada
+usando o comando @code{@uref{https://www.postgresql.org/docs/@value{pgversion}/static/sql-altertable.html,ALTER}}.
+
+No exemplo a seguir adicionamos o atributo @code{tarefa} do tipo
+@code{VARCHAR(16)} na tabela @code{Funcionario}:
+
+@example
+@value{prompt} ALTER TABLE Funcionario ADD COLUMN tarefa VARCHAR(16);
+@end example
+
+Para remover uma coluna devemos escolher @code{CASCADE} ou
+@code{RESTRICT} para o comportamento da alteração. Se @code{RESTRICT}
+for escolhido, não pode haver elementos que dependam da coluna removida.
+
+@example
+@value{prompt} ALTER TABLE Funcionario DROP COLUMN endereco CASCADE;
+@end example
+
+Também é possível alterar uma definição de coluna como no exemplo a seguir:
+
+@example
+@value{prompt} ALTER TABLE Departamento ALTER COLUMN cpf_gerente DROP DEFAULT;
+@value{prompt} ALTER TABLE Departamento ALTER COLUMN cpf_gerente
+               SET DEFAULT '33344555587';
+@end example
+
+Também é possível remover restrições, como no exemplo a seguir:
+
+@example
+@value{prompt} ALTER TABLE Funcionario DROP CONSTRAINT CHESUPERFUNC CASCADE;
+@end example
+
+
+@section Especificando restrições como asserções e ações como gatilhos (@i{triggers})
+
+@subsection Asserções como restrições
+
+As asserções ainda não estão implementadas no @value{pg} atualmente (@value{year}).
+A seguir, veremos um exemplo de asserção:
+
+@example
+@value{prompt} CREATE ASSERTION RESTRICAO_SALARIAL
+               CHECK (NOT EXISTS
+                     (SELECT * FROM Funcionario AS F,
+                                    Funcionario AS G,
+                                    Departamento AS D
+                      WHERE F.salario>G.salario
+                            AND F.id_departamento=D.id
+                            AND D.cpf_gerente=G.cpf)
+               );
+@end example
+
+Apesar das asserções não estarem implementadas no @value{pg}, podemos
+usar os gatilhos para garantir algumas restrições.
+

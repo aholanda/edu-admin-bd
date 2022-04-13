@@ -1,0 +1,273 @@
+@chapter Gatilho ou @emph{Trigger}
+
+@emph{Triggers} no PostgreSQL são funções que são automaticamente
+invocadas quando determinado evento ocorre no banco de dados. As
+@emph{triggers} possuem as seguintes características:
+
+@itemize
+@item A @emph{trigger} pode ser especificada para executar antes (@code{BEFORE}) ou depois (@code{AFTER}) das operações de inserção (@code{INSERT}), remoção (@code{REMOVE}) e atualização (@code{UPDATE}).
+@item Se uma @emph{trigger} for marcada com os comandos @code{FOR EACH ROW}, é
+  invocada uma vez para cada tupla que a operação afetar. Se a
+  @emph{trigger} é marcada com o comando @code{FOR EACH STATEMENT}, é
+  executada somente uma vez para cada operação, não importando quantas
+  tuplas a operação afete.
+@item A @emph{trigger} pode acessar elementos da tupla modificada usando as
+  variáveis @code{NEW.nome-columa} e @code{OLD.nome-coluna}, onde
+  @code{NEW} referencia o valor atual e @code{OLD} o valor anterior à
+  modificação, e o campo é indicado por @code{nome-coluna}.
+@item Se uma cláusula @code{WHEN} é fornecida, a declaração
+  especificada somente é executada se a cláusula for verdadeira. Se
+  não for fornecida uma cláusula @code{WHEN}, a operação é aplicada em
+  todas as tuplas.
+@item Se forem fornecidas várias @emph{triggers} para o mesmo evento, elas
+  serão executadas em ordem alfabética.
+@item As @emph{triggers} são automaticamente removidas se a tabela a qual 
+  estiverem associadas for removida.
+@item Se a opção @code{CONSTRAINT} for adicionada, cria uma restrição
+  para a @emph{trigger}, que faz com que o momento exato da execução da
+  @emph{trigger} seja ajustado pelo comando @code{SET CONSTRAINTS}. Uma
+  exceção normalmente é adicionada, para notificar quando uma
+  restrição é violada.
+@end itemize
+
+@section Sintaxe
+
+ A sintaxe para a criação de uma @emph{trigger} é a seguinte:
+
+@example
+  CREATE TRIGGER nome-gatilho [BEFORE|AFTER|INSTEAD OF] nome-evento
+  ON nome-tabela
+  @{
+    -- comandos --
+  @}
+@end example
+
+A seguir é mostrada a sintaxe para uma @emph{trigger} de atualização de uma 
+ou mais tuplas especificadas:
+
+@example
+  CREATE TRIGGER nome-gatilho [BEFORE|AFTER] UPDATE nome-evento
+  ON nome-tabela
+  @{
+    -- comandos --
+  @}
+@end example
+
+@noindent@strong{Exemplo.} Vamos usar uma tabela chamada
+@code{servidor} em nosso exemplo, criada conforme a declaração SQL
+a seguir:
+
+@example
+CREATE TABLE servidor(
+   id		 INT PRIMARY KEY NOT NULL,
+   nome          VARCHAR(128) NOT NULL,
+   nascimento    DATE NOT NULL,
+   endereco      VARCHAR(256),
+   salario       REAL
+);
+@end example
+
+Vamos usar uma tabela chamada @code{servidor} em nosso
+exemplo. Criamos a tabela auxiliar chamada @code{auditoria}, onde
+armazenaremos o resultado da @emph{trigger}, com os campos
+@code{servidorId} que armazena a identificação do funcionário e
+@code{dataEntrada} que guarda o momento da inserção do funcionário no
+banco de dados.
+
+@example
+CREATE TABLE auditoria(
+    servidorId INT NOT NULL REFERENCES servidor(id),
+    dataEntrada   TIMESTAMP NOT NULL
+);
+@end example
+
+A função @code{Auditar()} insere os dados do funcionário na tabela
+@code{auditoria}. O valores adicionados são @code{NEW.id}, que é o
+ @code{id} do funcionário inserido e @code{current_timestamp}, que é a
+variável que contem data e hora atuais. Repare que @code{RETURN
+TRIGGER} (linha~1) indica que esta funções é retornada como uma
+@emph{trigger}.
+
+@example
+CREATE OR REPLACE FUNCTION Auditar() RETURNS TRIGGER AS $$
+    BEGIN
+        INSERT INTO auditoria(servidorId, dataEntrada) VALUES (NEW.id, current_timestamp);
+        RETURN NEW;
+    END;
+$$ LANGUAGE PLPGSQL;
+@end example
+
+A declaração da @emph{trigger} @code{triggerServidor} indica que
+ela é executada depois da inserção (@code{INSERT}) na tabela
+@code{servidor}, e para cada tupla afetada (@code{FOR EACH ROW}), a
+função @code{Auditar()} é invocada. A @emph{trigger} é criada pela
+declaração a seguir:
+
+@example
+CREATE TRIGGER triggerServidor AFTER INSERT ON servidor
+    FOR EACH ROW EXECUTE PROCEDURE Auditar();
+@end example
+
+Vamos inserir um conjunto de valores com a declaração
+
+@example
+INSERT INTO servidor VALUES 
+    (1, 'Alice Silva', '1991-10-12', 'Av. Brasil 123', 2000.00 );
+@end example
+
+@noindent cuja saída é:
+
+@example
+ id |    nome     | nascimento |    endereco     | salario 
+----+-------------+------------+-----------------+---------
+  1 | Alice Silva | 1991-10-12 | Av. Brasil 123  |    2000
+(1 row)
+
+@end example
+
+@noindent e verificar os dados inseridos na tabela @code{servidor}
+
+@example
+SELECT * FROM servidor;
+@end example
+
+@noindent e pela @emph{trigger} na tabela @code{auditoria},
+
+@example
+SELECT * FROM auditoria;
+@end example
+
+@noindent cuja saída é:
+
+@example
+ servidorid |        dataentrada         
+---------------+----------------------------
+             1 | 2015-10-23 13:13:30.062857
+(1 row)
+
+@end example
+
+O campo @code{dataEntrada} contem o valor da data e hora em que os dados 
+do funcionário com identificação $1$ foram inseridos no banco de dados.
+
+Para listar as @emph{triggers} no banco de dados executamos a declaração
+
+@example
+SELECT * FROM pg_trigger;
+@end example
+
+@noindent e se quisermos saber as @emph{triggers} associadas a uma tabela em
+particular, por exemplo @code{servidor}, executamos:
+
+@example
+SELECT tgname FROM pg_trigger, pg_class 
+    WHERE tgrelid=pg_class.oid AND relname='servidor';
+@end example
+
+
+Voltando à nossa tabela @code{Funcionario}, se quisermos fazer um
+gatilho chamado @code{triggerViolacaoSalarial} que notifique quando houver uma
+alteração de salário de um funcionário de forma que seu salário torne-se
+maior do que o de um supervisor:
+
+@c Elmasri Navathe pg 88
+
+@example
+@value{prompt} CREATE TRIGGER triggerViolacaoSalarial
+               BEFORE INSERT OR UPDATE OF salario ON Funcionario
+               FOR EACH ROW EXECUTE PROCEDURE InformarSupervisor();
+@end example
+
+Vamos implementar procedimento armazenado @code{InformarSupervisor}
+somente para completar o gatilho:
+
+@example
+ CREATE OR REPLACE FUNCTION InformarSupervisor() RETURNS TRIGGER AS $$
+ BEGIN
+        IF NEW.salario >
+           ANY (SELECT S.salario
+                FROM FUNCIONARIO AS S, Funcionario AS F
+                WHERE F.cpf_supervisor=S.cpf) THEN
+               RAISE NOTICE 'Novo salario do CPF %: %', NEW.cpf, NEW.salario;
+        END IF;
+        RETURN NEW;
+ END;
+$$ LANGUAGE plpgsql;
+@end example
+
+Para remover o gatilho, basta executar o comando:
+
+@example
+@code{prompt} DROP TRIGGER triggerViolacaoSalarial ON Funcionario;
+@end example
+
+
+@unnumberedsec Exercícios
+
+@noindent@strong{1.} A partir da tabela @code{Aluno} descrita a seguir, crie um gatilho
+que remova a entrada de um aluno da tabela quando ele se forma. Leve em consideração 
+que o curso tem duração de 8 semestres.
+
+@example
+CREATE TABLE Aluno (
+  id INT PRIMARY KEY NOT NULL,
+  nome VARCHAR(64) NOT NULL,
+  curso VARCHAR(32) NOT NULL,
+  semestre INT NOT NULL
+);
+@end example
+@c % Resposta
+@c % CREATE OR REPLACE FUNCTION RemoveAluno() RETURNS TRIGGER AS $func$
+@c % BEGIN
+@c %   IF NEW.semestre > 8 THEN
+@c %     DELETE FROM aluno WHERE id = NEW.id;
+@c %   END IF;
+
+@c %   RETURN NEW;
+@c % END;
+@c % $func$ LANGUAGE plpgsql;
+
+@c % CREATE TRIGGER RemoveGraduado AFTER UPDATE OF semestre ON aluno
+@c %  FOR EACH ROW EXECUTE PROCEDURE RemoveAluno();
+
+@c @section{Referência}
+@c http://www.tutorialspoint.com/postgresql/postgresql_triggers.htm
+
+@noindent@strong{2. } Para as tabelas a seguir, faça um gatilho que atualize
+a quantidade de produtos no estoque toda vez que uma venda for
+efetuada, porém, não insira uma venda se não houver itens suficientes
+no estoque e lance uma exceção comunicando o evento.
+ 
+@example
+CREATE TABLE produto (
+    id INT PRIMARY KEY NOT NULL,
+    nome VARCHAR(64) NOT NULL,
+    quantidade INT NOT NULL
+);
+CREATE TABLE venda (
+    id SERIAL NOT NULL,
+    produto_id INT NOT NULL REFERENCES produto(id)
+               ON DELETE CASCADE ON UPDATE CASCADE,
+    quantidade INT NOT NULL,
+    valor_unitario REAL NOT NULL
+);
+@end example
+
+@c % CREATE OR REPLACE FUNCTION AtualizaProduto() RETURNS TRIGGER AS $func$
+@c % DECLARE nitens INTEGER;
+@c % BEGIN
+@c %     SELECT quantidade INTO nitens FROM produto WHERE id = NEW.produto_id;
+
+@c %     IF NEW.quantidade <= nitens THEN
+@c %          UPDATE produto SET quantidade = quantidade - NEW.quantidade WHERE id = NEW.produto_id;
+@c %     ELSE
+@c %          RAISE NOTICE 'Restando % itens em estoque', nitens;
+@c %          DELETE FROM venda WHERE id = NEW.id;
+@c %     END IF;
+
+@c %     RETURN NEW;
+@c % END;
+@c % $func$ LANGUAGE plpgsql;
+@c % CREATE TRIGGER Venda AFTER INSERT ON venda
+@c % FOR EACH ROW EXECUTE PROCEDURE AtualizaProduto();
+

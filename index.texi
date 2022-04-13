@@ -1,0 +1,596 @@
+@chapter Índices
+
+Para os testes com os índices criaremos uma tabela chamada
+@code{t_teste} com o comando
+
+@example
+CREATE TABLE t_teste (id int4);
+CREATE TABLE
+@end example
+
+A tabela será preenchida com uma sequência de números de 1 a 10000000
+para o campo @code{id} usando o comando
+
+@example
+INSERT INTO t_teste SELECT * FROM generate_series(1, 10000000);
+ INSERT 0 10000000
+@end example
+
+Para obter informações sobre a consulta usamos o comando @code{EXPLAIN}
+antes da consulta SQL
+
+@example
+EXPLAIN SELECT * FROM t_teste;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Seq Scan on t_teste  (cost=0.00..144247.77 rows=9999977 width=4)
+(1 row)
+@end example
+
+As informações indicam que foi feita uma varredura sequencial (@code{Seq Scan}) 
+e os números entre parênteses são:
+
+@itemize
+@item O custo estimado de inicialização é @code{0.00}, ou seja, o tempo
+  gasto para a fase de saída começar.
+@item O custo estimado total é @code{144247.77}, que é o tempo gasto
+  para todas as tuplas estarem disponíveis para acesso.
+@item O número de tuplas retornadas na consulta é @code{9999977}.
+@item Média estimada do tamanho das tuplas de saída é @code{4} bytes.
+@end itemize
+
+Para obter mais informações da consulta de @code{EXPLAIN ANALYZE}
+
+@example
+EXPLAIN ANALYZE SELECT * FROM t_teste;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------
+ Seq Scan on t_teste  (cost=0.00..144247.77 rows=9999977 width=4) 
+                   (actual time=20.062..1596.803 rows=10000000 loops=1)
+ Total runtime: 1887.827 ms
+(2 rows)
+@end example
+
+Adicionando a restrição @code{id=987987} teremos
+
+@example
+EXPLAIN ANALYZE SELECT * FROM t_teste WHERE id=987987;
+                                                QUERY PLAN                                                 
+---------------------------------------------------------------------
+ Seq Scan on t_teste  (cost=0.00..169247.71 rows=1 width=4) 
+                      (actual time=252.888..1577.011 rows=1 loops=1)
+   Filter: (id = 987987)
+   Rows Removed by Filter: 9999999
+ Total runtime: 1577.035 ms
+(4 rows)
+@end example
+
+O tempo de execução da consulta foi aproximadamente @code{1,6}s, mesmo
+que parte do tempo tenha sido gasto com a geração da explicação, é um
+tempo considerávelmente alto.
+
+Vamos criar um índice no campo @code{id} da tabela @code{t_teste}:
+
+@example
+CREATE INDEX i_teste_id ON t_teste(id);
+CREATE INDEX
+@end example
+
+E executar novamente a consulta de seleção do @code{id=987987}:
+
+@example
+EXPLAIN ANALYZE SELECT * FROM t_teste WHERE id=987987;
+                                                        QUERY PLAN                                                         
+--------------------------------------------------------------------
+ Index Only Scan using i_teste_id on t_teste  
+        (cost=0.43..8.45 rows=1 width=4) 
+        (actual time=21.539..21.540 rows=1 loops=1)
+   Index Cond: (id = 987987)
+   Heap Fetches: 1
+ Total runtime: 21.993 ms
+(4 rows)
+@end example
+
+Ao invés da varredura sequencial (@code{Seq Scan}), a tabela de índices
+é usada como indicado pela informação @code{Index Only Scan}, o que
+reduziu o tempo de saída para @code{21,993} ms.
+
+O PostgreSQL usa uma variação da árvore~B chamada árvore de Lehman-Yao
+para armazenamento dos índices. Esta estrutura permite acesso
+concorrente aos valores armazenados na árvore.
+
+@c http://www.postgresql.org/message-id/12553.1135634231@sss.pgh.pa.us
+
+@section Métodos de Varredura
+
+O PostgreSQL possui três métodos de varredura (@emph{scan}):
+
+@enumerate
+@item Sequencial: as tuplas são acessadas sequencialmente e aquelas
+  que satisfizerem à condição de busca serão recuperadas;
+@item Indexada somente (@emph{index}): pega um ponteiro para a tupla
+  por vez do índice, e imediatamente visita aquela tupla na tabela;
+@item Indexada com mapa de bits (@emph{bitmap index}): todas os
+  ponteiros para as tuplas do índice são capturados em uma passada,
+  ordenados na memória principal usando uma estrutura de dados chamada
+  mapa de bits (@emph{bitmap}), e então visita as tuplas na tabela,
+  seguindo a ordem do endereço físico da tupla. Esta varredura usa a
+  localidade espacial das tuplas para melhorar a performance de
+  acesso, ao custo de manter e gerenciar o mapa de bits na memória. A
+  tupla não é recuperada na ordem de armazenamento no índice, o que só
+  fará diferença para a consulta, se esta for feita com @code{ORDER BY}.
+@end enumerate
+
+De modo geral, a varredura somente com índice ganha para um pequeno
+número de tuplas, a varredura com mapa de bits e índice ganha para um
+número maior de tuplas e a varredura sequencial ganha quando o número
+de tuplas se aproxima do tamanho da tabela.
+
+Para exemplificar a diferença entre os três métodos vamos usar a tabela
+@code{pg_class}
+
+@example
+SELECT relname FROM pg_class ORDER BY 1 LIMIT 8;
+            relname              
+-----------------------------------
+ _pg_foreign_data_wrappers
+ _pg_foreign_servers
+ _pg_foreign_table_columns
+ _pg_foreign_tables
+ _pg_user_mappings
+ administrable_role_authorizations
+ applicable_roles
+ attributes
+(8 rows)
+@end example
+
+Se selecionarmos somente a primeira letra de cada entrada de @code{relname} temos:
+
+@example
+SELECT substring(relname, 1, 1) FROM pg_class ORDER BY 1 LIMIT 8;
+ substring 
+-----------
+ _
+ _
+ _
+ _
+ _
+ a
+ a
+ a
+(8 rows)
+@end example
+
+Criaremos uma tabela temporária com as primeiras letras de @code{relname} no primeiro campo e a letra 'x' repetida 250 vezes no
+segundo campo da seguinte maneira:
+
+@example
+CREATE TEMPORARY TABLE temp(letra, lixo) AS
+SELECT substring(relname, 1, 1), repeat('x', 250)
+FROM pg_class
+ORDER BY random();
+SELECT 294
+@end example
+
+E vamos criar uma tabela de índices para o campo @code{letra} da tabela @code{temp}
+
+@example
+CREATE INDEX i_temp_letra ON temp(letra);
+@end example
+
+Vamos criar uma função para gera a distribuição de letras
+
+@example
+CREATE OR REPLACE FUNCTION buscar_letra(text) RETURNS SETOF text AS $$
+BEGIN                 
+RETURN QUERY EXECUTE '
+        EXPLAIN SELECT letra 
+        FROM temp
+        WHERE letra = ''' || $1 || '''';
+END       
+$$ LANGUAGE plpgsql;
+CREATE FUNCTION
+@end example
+
+E verificar a distribuição para a tabela @code{temp}
+
+@example
+ WITH letras (letra, count) AS (
+    SELECT  letra, COUNT(*)
+    FROM temp  
+    GROUP BY 1
+)
+SELECT letra, count, 
+    (count * 100.0 / (SUM(count) OVER ()))::numeric(4,1) AS "%"
+    FROM letras
+    ORDER BY 2 DESC;
+ 
+letra | count |  %   
+-------+-------+------
+ p     |   227 | 77.2
+ c     |    12 |  4.1
+ s     |     9 |  3.1
+ r     |     8 |  2.7
+ f     |     6 |  2.0
+ t     |     6 |  2.0
+ u     |     5 |  1.7
+ _     |     5 |  1.7
+ d     |     4 |  1.4
+ v     |     4 |  1.4
+ a     |     3 |  1.0
+ e     |     2 |  0.7
+ i     |     2 |  0.7
+ k     |     1 |  0.3
+(14 rows)
+@end example
+
+Vejamos a estatística da letras 'p', 'd' e 'k'
+
+@example
+EXPLAIN SELECT letra 
+FROM temp  
+WHERE letra = 'p';
+                               QUERY PLAN                                
+----------------------------------------------------------------------
+ Index Only Scan using i_temp on temp  (cost=0.15..8.17 rows=1 width=32)
+   Index Cond: (letra = 'p'::text)
+(2 rows)
+@end example
+
+
+@example
+EXPLAIN SELECT letra 
+FROM temp
+WHERE letra = 'd';
+                               QUERY PLAN                                
+----------------------------------------------------------------------
+ Index Only Scan using i_temp on temp  (cost=0.15..8.17 rows=1 width=32)
+   Index Cond: (letra = 'd'::text)
+(2 rows)
+@end example
+
+@example
+EXPLAIN SELECT letra 
+FROM temp
+WHERE letra = 'k';
+                               QUERY PLAN                                
+----------------------------------------------------------------------
+ Index Only Scan using i_temp on temp  (cost=0.15..8.17 rows=1 width=32)
+   Index Cond: (letra = 'k'::text)
+(2 rows)
+@end example
+
+Com o uso de @code{ANALYZE} na tabela @code{temp}, a varredura
+sequencial é usada para valores repetidos
+
+@example
+ANALYZE temp;
+ANALYZE
+@end example
+
+Analisando de novo as consultas da da seleção em @code{temp} para as letras 
+'p', 'd' e 'k'
+
+@example
+EXPLAIN SELECT letra 
+FROM temp
+WHERE letra = 'p';
+                      QUERY PLAN                       
+---------------------------------------------------------------
+ Seq Scan on temp  (cost=0.00..14.68 rows=227 width=2)
+   Filter: (letra = 'p'::text)
+(2 rows)
+@end example
+
+Apesar da criação do índice, a consulta não é feita utilizando-o
+
+@example
+EXPLAIN SELECT letra 
+FROM temp
+WHERE letra = 'd';
+                             QUERY PLAN                              
+----------------------------------------------------------------
+ Bitmap Heap Scan on temp  (cost=4.18..12.99 rows=4 width=2)
+   Recheck Cond: (letra = 'd'::text)
+   ->  Bitmap Index Scan on i_temp_letra  
+        (cost=0.00..4.18 rows=4 width=0)
+         Index Cond: (letra = 'd'::text)
+(4 rows)
+@end example
+
+@example
+EXPLAIN SELECT letra 
+FROM temp
+WHERE letra = 'k';
+                             QUERY PLAN                              
+--------------------------------------------------------------------
+ Bitmap Heap Scan on temp  (cost=4.16..9.63 rows=2 width=2)
+   Recheck Cond: (letra = 'k'::text)
+   ->  Bitmap Index Scan on i_temp_letra  
+        (cost=0.00..4.16 rows=2 width=0)
+         Index Cond: (letra = 'k'::text)
+(4 rows)
+@end example
+
+Vamos verificar qual índice de varredura é usado para cada letra
+armazenada no campo @code{letra} da tabela @code{temp}
+
+@example
+WITH letra (letra, count) AS (
+        SELECT letra, COUNT(*)
+        FROM temp
+        GROUP BY 1
+)
+SELECT letra AS l, count, buscar_letra(letra)
+FROM letra
+ORDER BY 2 DESC;
+ l | count |                               buscar_letra                                
+---+-------+-----------------------------------------------------------
+ p |   227 | Seq Scan on temp  (cost=0.00..14.68 rows=227 width=2)
+ p |   227 |   Filter: (letra = 'p'::text)
+ c |    12 | Seq Scan on temp  (cost=0.00..14.68 rows=12 width=2)
+ c |    12 |   Filter: (letra = 'c'::text)
+ s |     9 |   Filter: (letra = 's'::text)
+ s |     9 | Seq Scan on temp  (cost=0.00..14.68 rows=9 width=2)
+ r |     8 |   Filter: (letra = 'r'::text)
+...
+@end example
+
+Vamos agrupar os índices com o comando
+
+@example
+WITH letra (letra, count) AS (
+        SELECT letra, COUNT(*)
+        FROM temp  
+        GROUP BY 1
+)
+SELECT letra AS l, count,
+        (SELECT *
+        FROM buscar_letra(letra) AS l2
+        LIMIT 1) AS buscar_letra 
+FROM letra 
+ORDER BY 2 DESC;
+ l | count |                        buscar_letra                         
+---+-------+----------------------------------------------------------
+ p |   227 | Seq Scan on temp  (cost=0.00..14.68 rows=227 width=2)
+ c |    12 | Seq Scan on temp  (cost=0.00..14.68 rows=12 width=2)
+ s |     9 | Seq Scan on temp  (cost=0.00..14.68 rows=9 width=2)
+ r |     8 | Seq Scan on temp  (cost=0.00..14.68 rows=8 width=2)
+ f |     6 | Bitmap Heap Scan on temp  (cost=4.19..14.16 rows=6 width=2)
+ t |     6 | Bitmap Heap Scan on temp  (cost=4.19..14.16 rows=6 width=2)
+ _ |     5 | Bitmap Heap Scan on temp  (cost=4.19..14.14 rows=5 width=2)
+ u |     5 | Bitmap Heap Scan on temp  (cost=4.19..14.14 rows=5 width=2)
+ v |     4 | Bitmap Heap Scan on temp  (cost=4.18..12.99 rows=4 width=2)
+ d |     4 | Bitmap Heap Scan on temp  (cost=4.18..12.99 rows=4 width=2)
+ a |     3 | Bitmap Heap Scan on temp  (cost=4.17..11.51 rows=3 width=2)
+ e |     2 | Bitmap Heap Scan on temp  (cost=4.16..9.63 rows=2 width=2)
+ i |     2 | Bitmap Heap Scan on temp  (cost=4.16..9.63 rows=2 width=2)
+ k |     1 | Bitmap Heap Scan on temp  (cost=4.16..9.63 rows=2 width=2)
+(14 rows)
+@end example
+
+Vamos desabilitar as varreduras sequencial e por mapa de bits para que
+a consulta seja feita usando índices
+
+@example
+SET enable_seqscan = false;
+SET
+@end example
+
+@example
+SET enable_bitmapscan = false;
+SET
+@end example
+
+E executamos de novo o agrupamento das letras por método de varredura
+
+@example
+WITH letra (letra, count) AS (
+        SELECT letra, COUNT(*)
+        FROM temp
+        GROUP BY 1
+)
+SELECT letra AS l, count,
+        (SELECT *
+        FROM buscar_letra(letra) AS l2
+        LIMIT 1) AS buscar_letra
+FROM letra
+ORDER BY 2 DESC;
+ l | count |                                  buscar_letra                                   
+---+-------+-----------------------------------------------------------
+ p |   227 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..42.93 rows=227 width=2)
+ c |    12 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..24.82 rows=12 width=2)
+ s |     9 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..22.41 rows=9 width=2)
+ r |     8 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..20.04 rows=8 width=2)
+ f |     6 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..17.66 rows=6 width=2)
+ t |     6 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..17.66 rows=6 width=2)
+ _ |     5 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..17.64 rows=5 width=2)
+ u |     5 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..17.64 rows=5 width=2)
+ v |     4 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..15.27 rows=4 width=2)
+ d |     4 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..15.27 rows=4 width=2)
+ a |     3 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..12.90 rows=3 width=2)
+ i |     2 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..10.53 rows=2 width=2)
+ e |     2 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..10.53 rows=2 width=2)
+ k |     1 | Index Only Scan using i_temp_letra on temp  
+        (cost=0.15..10.53 rows=2 width=2)
+(14 rows)
+@end example
+
+Notamos que o custo da busca usando a tabela de índices para a letra
+'p' é @code{42,93}, maior que o custa da busca sequencial que foi
+@code{14,68}. O mesmo acontece para o custo de busca da letra 'f' que
+usou a varredura por mapa de bits e foi @code{14,16}, enquanto que
+usando o índice foi de @code{17,66}.
+
+Vamos verificar o espaço em disco ocupado pela tabela @code{t_teste} e pelo índice 
+@code{i_teste_id}
+
+@example
+ SELECT pg_size_pretty(pg_relation_size('t_teste')), 
+        pg_size_pretty(pg_relation_size('i_teste_id'));
+
+ pg_size_pretty | pg_size_pretty 
+----------------+----------------
+ 346 MB         | 214 MB
+(1 row)
+@end example
+
+@noindent Notamos que a tabela de índices ocupa um espaço considerável.
+
+Vamos apagar a tabela @code{t_teste}
+
+@example
+ DROP TABLE t_teste;
+@end example
+
+E adicionar um campo @code{w}
+
+@example
+CREATE TABLE t_teste (id int4, w text);
+@end example
+
+E inserir a palavra 'alice' para cada entrada da série gerada de 1 a 10000000
+
+@example
+INSERT INTO t_teste SELECT w, 'alice' 
+        FROM generate_series(1, 10000000) as w;
+@end example
+
+E vamos criar índices para p campo @code{w} da tabela @code{t_teste},
+isto exigirá um pouco de paciência
+
+@example
+CREATE INDEX i_teste_w ON t_teste(w);
+@end example
+
+Verificamos o espaço em disco ocupado
+
+@example
+ SELECT pg_size_pretty(pg_relation_size('t_teste')), 
+        pg_size_pretty(pg_relation_size('i_teste_w'));
+
+ pg_size_pretty | pg_size_pretty 
+----------------+----------------
+ 422 MB         | 214 MB
+(1 row)
+
+@end example
+
+@noindent E fazemos a busca utilizando o índice do campo @code{w}
+
+@example
+EXPLAIN SELECT * FROM t_teste WHERE w = 'alice';
+
+                                 QUERY PLAN 
+------------------------------------------------------------------------
+ Index Scan using i_teste_w on t_teste  
+        (cost=0.43..338746.43 rows=10000000 width=10)
+   Index Cond: (w = 'alice'::text)
+(2 rows)
+@end example
+
+@noindent Habilitamos a varredura sequencial
+
+@example
+SET enable_seqscan = true;
+@end example
+
+@noindent e repetimos a consulta
+
+@example
+ EXPLAIN SELECT * FROM t_teste WHERE w = 'alice';
+
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Seq Scan on t_teste  (cost=0.00..179055.00 rows=10000000 width=10)
+   Filter: (w = 'alice'::text)
+(2 rows)
+
+@end example
+
+O custo da varredura sequencial foi menor (179.055) do que a indexada
+(338.746,43). O índice neste caso é inútil, pois há muitas repetições
+para o campo @code{w}. A busca forçando o uso do índice faz com que o
+PostgreSQL leia todas as entradas do índice e depois todas as entradas
+na tabela.
+
+Com a varredura sequencial habilitada, o otimizador de plano de
+consultas verifica o custo do uso ou não do índice e opta pela
+estratégia de menor custo, que no caso é a não utilização de índices,
+que provoca a leitura sequencial da tabela, reduzindo as requisições
+de entrada/saída.
+
+O uso de índice é justificado quando há pouca ou nenhuma repetição do elemento 
+ indexado, por exemplo, se procurarmos um valor que não está na tabela, o custo utilizando 
+índice será bem menor, conforme mostrado a seguir:
+
+@example
+EXPLAIN SELECT * FROM t_teste WHERE w = 'foo';
+
+                                QUERY PLAN                                
+----------------------------------------------------------------------
+ Index Scan using i_teste_w on t_teste  
+        (cost=0.43..4.45 rows=1 width=10)
+   Index Cond: (w = 'foo'::text)
+(2 rows)
+
+@end example
+
+@noindent Desabilitamos os índices
+
+@example
+SET enable_indexscan = true;
+@end example
+
+@noindent e repetimos a consulta
+
+@example
+EXPLAIN SELECT * FROM t_teste WHERE w = 'foo';
+
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Seq Scan on t_teste  (cost=0.00..179055.00 rows=1 width=10)
+   Filter: (w = 'foo'::text)
+(2 rows)
+
+@end example
+
+Não houve alteração do custo para a varredura sequencial, porém, para
+a varredura com índice o custo foi bem menor (@code{4,45}). Isto
+ocorreu pelo fato de a palavra não existir na árvore de índices, o que
+reduz o custo da busca na árvore B. Além disso, como o valor não é
+encontrado no índice, nem é procurado na tabela.
+
+É interessante que o administrador de banco de dados verifique a
+utilização dos índices, pois se um índice estiver sendo pouco
+utilizado poderá ser removido, liberando espaço em disco e evitando
+que haja sobrecarga no banco de dados devido à manutenção da estrutura
+dos índices.
+
+No PostgreSQL podemos ver a estatística de utilização do índice usando o comando:
+
+@example
+SELECT * FROM pg_catalog.pg_stat_user_indexes;
+@end example
+
+@unnumberedsec Referências
+
+A apresentação ``Explaining the Postgres Query Optimizer'' de Bruce
+Momjian disponível em @uref{https://goo.gl/wUN9Ow} é uma fonte
+adicional de informações sobre índices. O livro ``Troubleshooting
+PostgreSQL'' de Hans-Jürgen Schönig também é uma boa referência, por
+mostrar exemplos de uso dos índices. Os exemplos deste manuscrito
+foram extraídos destas referências.

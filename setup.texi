@@ -1,0 +1,47 @@
+@chapter Configuração Inicial do Banco de Dados
+
+Vamos configurar um banco de dados e usuário para utilizá-lo ao longo do
+curso, lembrando que como estamos em uma rede local, estes não são
+acessíveis de fora da rede. Voltamos a nos conectar no @value{pg}
+como usuário @code{postgres}:
+
+@example
+    $ sudo su - postgres
+    $ psql
+@end example
+
+Já no @value{pg}, criaremos um banco de dados chamado @code{@value{login}}
+concatenado com o ano atual:
+
+@example
+    postgres=# CREATE DATABASE @value{dbname}@value{year};
+@end example
+
+Criaremos um usuário @code{@value{login}}, com a senha igual ao nome do banco de dados,
+não façam isso em casa:
+
+@example
+    postgres=# CREATE USER @value{login} WITH PASSWORD '@value{login}@value{year}';
+@end example
+
+
+Vamos conceder todos os privilégios para o usuário @code{@value{login}} no banco
+de banco de dados @code{@value{login}2017}, desconectar, e sair do perfil do
+usuário @code{postgres} no sistema operacional:
+
+@example
+    postgres=# GRANT ALL PRIVILEGES ON DATABASE @value{dbname}@value{year} TO @value{login};
+    postgres=# \q
+    $ exit
+@end example
+
+Agora vamos conectar ao banco de dados @code{@value{dbname}@value{year}} como usuário do
+banco de dados @code{@value{login}}, lembrando que a senha é @code{@value{login}@value{year}}. O
+@i{prompt} do banco de dados aparecerá:
+
+@example
+    $ psql -U @value{login} -h localhost @value{dbname}@value{year}
+    Password for user @value{login}:
+    
+    @value{login}@value{year}=> \q
+@end example

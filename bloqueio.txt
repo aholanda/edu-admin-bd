@@ -1,0 +1,221 @@
+% Administração de Banco de Dados: Bloqueio
+% Adriano J. Holanda
+% 2/10/2015
+
+# Bloqueio usando o modo `FOR UPDATE`
+
+Vamos criar uma tabela para realizar os testes 
+
+~~~~~~~~
+postgres=# CREATE TABLE nofu_teste (id int, saldo int);
+CREATE TABLE
+~~~~~~~~
+
+e inserir valores iniciais
+
+~~~~~~~~
+postgres=# INSERT INTO nofu_teste VALUES (1234, 1000);
+INSERT 0 2
+~~~~~~~~
+
+Devido à possibilidade de leitura concorrente no PostgreSQL, as
+seguintes consultas pode ter resultados indesejados:
+
+<table border="1">
+<tr>
+	<th>Usuário 1</th>
+	<th>Usuário 2</th>
+</tr>
+<tr> 
+     <td>
+	<code>
+		BEGIN;
+	</code>
+     </td>
+     <td></td>
+</tr>
+<tr>
+     <td>
+	<code>
+		postgres=# SELECT saldo FROM nofu_teste WHERE id = 1234; <br>
+	  saldo   <br>
+	  -----   <br>
+   	  1000    <br>
+	  (1 row) <br>		  
+         </code>
+     </td>
+     <td></td>
+</tr>
+<tr>
+     <td></td>
+     <td>
+	<code>
+		BEGIN;
+         </code>
+     </td>
+</tr>
+<tr>
+     <td></td>
+     <td>
+	<code>
+		postgres=# SELECT saldo FROM nofu_teste WHERE id = 1234;
+	  saldo   <br>
+	  -----   <br>
+   	  1000    <br>
+	  (1 row) <br>		  
+         </code>
+     </td>
+</tr>
+<tr>
+     <td>
+     </td>
+     <td>
+	<code>
+		postgres=# UPDATE nofu_teste SET saldo = saldo - 300 WHERE id = 1234; <br>
+		UPDATE 1
+        </code>
+     </td>
+</tr>
+<tr>
+     <td>
+	<code>
+		postgres=# COMMIT; <br>
+		COMMIT
+        </code>
+     </td>	
+     <td>
+	<code>
+		postgres=# COMMIT; <br>
+		COMMIT
+        </code>
+     </td>
+</tr>
+</table>
+
+
+Uma transação como esta não é segura, pois após o <code>SELECT</code>
+o valor do campo <code>saldo</code> foi alterado pelo usuário 2, e se
+o usuário 1 utilizar o valor lido na aplicação, estará trabalhando com
+um valor desatualizado, conduzindo a inconsistências.
+
+A solução é bloquear a tupla usando <code>FOR UPDATE</code>,
+ criando a tabela <code>fu_teste</code> com o mesmo valor inicial
+ de <code>nofu_teste</code>:
+
+~~~~~~~~
+postgres=# CREATE TABLE fu_teste (id int, saldo int);
+CREATE TABLE
+postgres=# INSERT INTO fu_teste VALUES (1234, 1000);
+INSERT 0 2
+~~~~~~~~
+
+<table border="1">
+<tr>
+	<th>Usuário 1</th>
+	<th>Usuário 2</th>
+</tr>
+
+<tr> 
+     <td>
+	<code>
+		BEGIN;
+	</code>
+     </td>
+     <td></td>
+</tr>
+<tr>
+     <td>
+	<code>
+		postgres=# SELECT saldo FROM fu_teste WHERE id = 1234 FOR UPDATE; <br>
+	  saldo   <br>
+	  -----   <br>
+   	  1000    <br>
+	  (1 row) <br>		  
+         </code>
+     </td>
+     <td></td>
+</tr>
+<tr>
+     <td></td>
+     <td>
+	<code>
+		postgres=# SELECT saldo FROM fu_teste WHERE id = 1234 FOR UPDATE;
+     	  	<br>
+         </code>
+     </td>
+</tr>
+<tr>
+     <td>
+	<code>
+		postgres=# UPDATE fu_teste SET saldo = saldo - 300 WHERE id = 1234; <br>
+		UPDATE 1
+        </code>
+     </td>
+     <td>
+   	espera...
+     </td>
+</tr>
+<tr>
+     <td>
+	<code>
+		postgres=# COMMIT; <br>
+		COMMIT
+        </code>
+     </td>
+     <td>
+	espera...
+     </td>
+</tr>
+<tr>
+     <td> 
+     </td>
+     <td>
+	<code>
+     		saldo   <br>
+     		------- <br>
+     		700     <br>
+     		(1 row) <br>
+	</code>
+     </td>
+</tr>
+<tr>
+     <td> 
+     </td>
+     <td>
+	<code>
+		postgres=# UPDATE fu_teste SET saldo = saldo + 250 WHERE id = 1234; <br>
+		UPDATE 1
+        </code>
+      </td>
+</tr>
+<tr>
+     <td> 
+     </td>
+     <td>
+	<code>
+		 postgres=# SELECT saldo FROM fu_teste WHERE id = 1234 FOR UPDATE; <br>
+		 saldo   <br>
+		 ------- <br>
+   		 950     <br>
+		 (1 row) <br>
+        </code>
+      </td>
+</tr>
+
+<tr>
+     <td> 
+     </td>
+     <td>
+	<code>
+		 postgres=# COMMIT; <br>
+		 COMMIT
+        </code>
+      </td>
+</tr>
+</table>
+
+Como o usuário 1 adquiriu o bloqueio da tupla para o `id = 1234`
+primeiro que o usuário 2 usando o `FOR UPDATE`, o bloqueio do usuário
+2 só é efetuado quando a transação do usuário 1 estiver sido
+completada, garantindo a leitura do valor correto para modificação.
+

@@ -1,0 +1,340 @@
+@chapter Funções ou Procedimentos Armazenados
+
+Para criar uma nova função no PostgreSQL, a sintaxe é:
+
+@example
+CREATE FUNCTION NomeFunc(p1 tipo, p2 tipo, ..., pn tipo)
+  RETURNS tipo AS
+BEGIN
+ -- lógica
+END;
+LANGUAGE NomeLinguagem;
+@end example
+
+Vamos examinar a declaração em detalhes:
+
+@itemize
+@item Após a cláusula @code{CREATE FUNCTION} vem o nome da função;
+@item A lista de parâmetros @math{p_1, p_2, \ldots, p_n} deve ser fornecida, bem como o 
+  tipo de dados de cada parâmetro;
+@item Após a palavra reservada @code{RETURNS} vem o tipo de dados que a função irá retornar;
+@item Entre @code{BEGIN} e @code{END} vem a lógica da função, onde cada instrução deve terminar com ``;'';
+@item Após a palavra reservada @code{LANGUAGE} deve vir a linguagem utilizada para a declaração da função. 
+  O PostgreSQL aceita por padrão as linguagens PL/PgSQL, SQL, PL/Perl, PL/Python e PL/TCL. Outras linguagens 
+  podem ser adicionadas como extensão. Uma listagem atual de suporte às linguagens pode ser encontrada em 
+  @uref{https://wiki.postgresql.org/wiki/PL_Matrix}.
+@end itemize
+
+Nos exemplos usaremos a linguagem PL/PgSQL que é muito parecida com a linguagem 
+PL/PgSQL do banco de dados Oracle. 
+
+Vamos criar uma função que incrementa o valor fornecido como parâmetro em 1 unidade:
+
+@example
+CREATE FUNCTION Inc(val integer) RETURNS integer AS $$
+ BEGIN
+     RETURN val + 1;
+ END; $$
+ LANGUAGE PLPGSQL;
+@end example
+
+O sinal de dólar circunda a função, pois a definição da função deve
+ser fornecida como uma string. O apóstrofe `` ' ''também pode ser
+usado.
+
+Vamos testar a função que é invocada como qualquer outra função:
+
+@example
+SELECT Inc(16);
+
+ inc 
+-----
+  17
+(1 row)
+
+SELECT Inc(Inc(16));
+ inc 
+-----
+  18
+(1 row)
+
+@end example
+
+
+@section Parâmetros
+
+A linguagem PL/PgSQL possui os tipos de parâmetros @code{IN}, @code{OUT},
+@code{INOUT} e @code{VARIADIC}. Por padrão os parâmetros são de
+entrada~(@code{IN}), como mostrado no exemplo a seguir:
+
+@example
+CREATE OR REPLACE FUNCTION Soma(
+  a NUMERIC, 
+  b NUMERIC) 
+RETURNS NUMERIC AS $$
+BEGIN
+  RETURN a + b;
+END; $$
+LANGUAGE plpgsql;
+@end example
+
+A função soma recebe os parâmetros de entrada @code{a} e @code{b} e
+returna a soma dos valores fornecidos como parâmetro.
+
+O parâmetro de saída @code{OUT} permite que o valor seja retornado
+como resultado após a execução da função, como mostrado na listagem a
+seguir:
+
+@verbatiminclude max-min.sql
+
+A função recebe 5 parâmetros:
+
+@itemize
+@item Três parâmetros @code{IN} @code{a}, @code{b}, @code{c};
+@item Dois parâmetros @code{OUT} @code{max} e @code{min}.
+@end itemize
+
+Os parâmetros @code{OUT} são retornados sem a necessidade de utilizar o
+@code{RETURN}, como mostrado a seguir:
+
+@example
+select MaxMin(66, 88, 999);
+
+ maxmin  
+----------
+ (999,66)
+(1 row)
+
+@end example
+
+As funções @code{GREATEST} e @code{LEAST} são funções internas do
+PostgreSQL, e retornam o maior e menor valores, respectivamente.
+
+O parâmetro @code{INOUT} é uma combinação de @code{IN} e @code{OUT},
+ou seja, permite que o parâmetro seja fornecido como entrada e
+retornado como resultado. A função a seguir mostra um exemplo de uso:
+
+@verbatiminclude quadrado.sql
+
+O resultado do uso é mostrado a seguir:
+
+@example
+SELECT Quadrado(3);
+
+ quadrado 
+----------
+        9
+(1 row)
+
+@end example
+
+O tipo de parâmetro @code{VARIADIC} permite que os parâmetros de entrada 
+sejam de tamanho variável. O exemplo a seguir mostra seu uso:
+
+@verbatiminclude soma-media.sql
+
+A função @code{SomaMedia} recebe um vetor lista com número de elementos
+variável e retorna a soma e a média destes elementos como mostrado:
+
+@example
+SELECT SomaMedia(2,4,6,8,10,12,14,16);
+
+       somamedia        
+-------------------------
+ (72,9.0000000000000000)
+(1 row)
+
+@end example
+
+@c @section Sobrecarga
+
+@c A PL/PgSQL permite que várias funções tenham o mesmo nome, desde que o
+@c número de argumentos seja diferente. Vamos dar uma olhada na 
+@c função @code{DuracaoEmprestimo} definida na listagem a seguir:
+
+@c @verbatiminclude emprestimo1.sql
+
+@c Ao invocarmos a função, obtemos a saída:
+
+@c @example
+@c SELECT DuracaoEmprestimo(123);
+
+@c  duracaoemprestimo 
+@c -------------------
+@c                  4
+@c (1 row)
+
+@c @end example
+
+@c Se quisermos uma função com o mesmo comportamento, porém, ao invés de
+@c usar a data atual como base de cálculo, seja fornecida uma data,
+@c podemos definir a função da listagem a seguir:
+
+@c @verbatiminclude emprestimo2.sql
+
+@c Ao invocarmos a função, fornecendo a data que queremos que seja usada
+@c para comparação, a função correta é automaticamente chamada:
+
+@c @example
+@c SELECT DuracaoEmprestimo(123, '2015-10-08');
+
+@c  duracaoemprestimo 
+@c -------------------
+@c                  3
+@c (1 row)
+
+@c @end example
+
+@section Laço e Condicional
+
+A linguagem PL/PgSQL oferece várias formas de se executar
+repetições. O comando @code{LOOP} tem a seguinte sintaxe:
+
+@example
+<<label>>
+LOOP
+   Statements;
+   EXIT [<<label>>] WHEN condition;
+END LOOP;
+@end example
+
+
+Um exemplo de uso de @code{LOOP} é a função definida na
+listagem a seguir que calcula a sequência de Fibonacci de
+acordo com o número de termos fornecidos:
+
+@verbatiminclude fibonacci.sql
+
+A sequência de Fibonacci é calculada com os dois primeiros termos
+sendo iguais a $0$ e $1$ e os termos seguintes sendo o resultado da
+soma dos dois anteriores. O @code{LOOP} para de ser executado que o
+valor do @code{contador} for igual ao número de vezes $n$ que a
+iteração deve ocorrer.
+
+Na linha 9, se o valor de $n$ for menor que 1 o valor $0$ é retornado.
+O comando @code{IF} possui as três sintaxes listadas a seguir:
+
+@example
+IF condition THEN
+   statement;
+END IF;
+@end example
+
+@example
+IF condition THEN
+  statements;
+ELSE
+  alternative-statements;
+END IF;
+@end example
+
+@example
+IF condition-1 THEN
+  if-statement;
+ELSIF condition-2 THEN
+  elsif-statement-2
+...
+ELSIF condition-n THEN
+  elsif-statement-n;
+ELSE
+  else-statement;
+END IF:
+@end example
+
+O uso da função @code{Fibonacci} é mostrado a seguir:
+
+@example
+SELECT Fibonacci(8);
+
+ fibonacci 
+-----------
+        21
+(1 row)
+
+@end example
+
+Além do @code{LOOP}, os laços @code{WHILE} e @code{FOR} podem 
+ser usados com as seguintes sintaxes:
+
+@example
+[ <<label>> ]
+WHILE condition LOOP
+   statements;
+END LOOP;
+@end example
+
+@example
+[ <<label>> ]
+FOR loop_counter IN [ REVERSE ] from.. to [ BY expression ] LOOP
+    statements
+END LOOP [ label ];
+@end example
+
+A função da listagem a seguir mostra o uso do @code{FOR...LOOP}
+em uma consulta dinâmica. O tipo de ordenação é fornecido como
+argumento, o valor 1 ordena por ano de lançamento, enquanto que o
+valor 2 ordena por título. O número de filmes a serem listados também
+é fornecido como o argumento @code{n}. Primeiro a @code{consulta} é
+construída através da concatenação de strings, depois o laço é usado
+para percorrer os valores retornados.
+
+@verbatiminclude filmes.sql
+
+Ao executarmos a função @code{ListarFilmes} solicitando 5 filmes 
+ordenados por ano obteremos: 
+
+@example
+SELECT ListarFilmes(1,5);
+
+NOTICE:  1993 - A Lista de Schindler
+NOTICE:  1993 - A Lista de Schindler
+NOTICE:  1993 - A Lista de Schindler
+NOTICE:  1994 - Forrest Gump
+NOTICE:  1994 - Forrest Gump
+ listarfilmes 
+--------------
+ 
+(1 row)
+
+@end example
+
+Ao pedirmos para listar 7 filmes ordenados por título, a saída será:
+
+@example
+SELECT ListarFilmes(1,7);
+
+NOTICE:  1993 - A Lista de Schindler
+NOTICE:  1993 - A Lista de Schindler
+NOTICE:  1993 - A Lista de Schindler
+NOTICE:  1994 - Forrest Gump
+NOTICE:  1994 - Forrest Gump
+NOTICE:  1994 - Forrest Gump
+NOTICE:  2008 - O Curioso Caso de Benjamin Button
+ listarfilmes 
+--------------
+ 
+(1 row)
+@end example 
+
+@unnumberedsec Exercícios
+
+Para os exercícios a seguir será necessário executar o script
+@uref{@value{urlbase}/cidades.sql,cidades.sql}.
+
+@noindent@strong{1.} Escreva funções usando PL/PgSQL usando sobrecarga para
+que tenham o mesmo nome e executem as seguintes tarefas.
+
+@enumerate
+@item Liste as cidades de um estado, tendo o nome do estado fornecido
+  como argumento.
+@item Liste n cidades de um estado, tendo como argumentos o nome do
+  estado e o número de cidades a serem listadas.
+@item Liste as cidades de vários estados, tendo um número variável de
+  estados fornecido como argumento.
+@end enumerate
+
+@unnumberedsec Referência
+
+Os exemplos e conceitos deste roteiro foram adaptados do tutorial
+``PostgreSQL Stored Procedures'' acessível de
+@uref{http://www.postgresqltutorial.com/postgresql-stored-procedures/}.

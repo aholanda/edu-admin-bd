@@ -1,0 +1,217 @@
+@node Papeis e Permissões
+@chapter Papeis e Permissões
+@c @pindex permissões
+@c @cindex invoking @command{sample}
+
+
+No @value{pg} as permissões são gerenciadas usando o conceito de
+papeis (@emph{roles}). O conceito de papeis agrupa os conceitos de
+usuário e grupo. Um papel pode atuar como usuário, grupo ou ambos.
+Antes da versão 8.1 havia distinção entre os conceitos, que foi
+extinta nas versões posteriores. Os papéis podem ser listados usando o
+comando:
+
+@example
+@backslashchar{}du
+@end example
+
+@noindent cuja saída no banco de dados @value{pg} é 
+
+@verbatim
+ Role name |                   Attributes                   | Member of 
+-----------+------------------------------------------------+-----------
+ postgres  | Superuser, Create role, Create DB, Replication | {}
+
+@end verbatim
+
+As mesmas informações com uma formatação diferente podem ser obtidas usando 
+a declaração SQL:
+
+@example
+SELECT * FROM pg_roles;
+@end example
+
+@section Atributos dos Papeis
+
+Os papeis possuem atributos que definem seus privilégios e interagem 
+com o sistema de autenticação do cliente. Estes atributos são listados 
+a seguir:
+
+@enumerate
+@item @code{LOGIN}: Somente papeis criados com o atributo @code{LOGIN} 
+podem realizar conexões com o banco de dados. O atributo @code{LOGIN}
+usado na declaração a seguir especifica que o papel identificado por
+@code{nome} é um usuário do banco de dados:
+@example
+CREATE ROLE nome LOGIN;
+@end example
+@item @code{SUPERUSER}: O atributo @code{SUPERUSER} faz com que todas as checagens 
+de permissões sejam desativadas. E um privilegio perigoso e deve ser usado com 
+cuidado.
+@item @code{CREATEDB}: A declaração @code{CREATE ROLE nome CREATEDB} eh usada 
+para criar um papel identificado por @code{nome} que tem permissão para
+criar bancos de dados.
+@item @code{CREATEROLE}: A declaração @code{CREATE ROLE nome CREATEROLE} eh usada 
+para criar um papel identificado por @code{nome} que tem permissão para
+criar papeis. O usuário também pode alterar e remover os papeis criados por ele.
+@item @code{PASSWORD}: Se o usuário requer autenticação, ao atributo @code{PASSWORD} deve ser atribuído um valor que e usado como senha do usuário. Na criação 
+do papel a senha pode ser inicializada da seguinte forma:
+@example
+CREATE ROLE nome PASSWORD 'senha';
+@end example 
+@end enumerate
+
+@section Privilégios
+
+Quando um objeto é criado, é atribuído um proprietário que normalmente
+é o papel que executou a declaração de criação. O estado inicial do
+objeto permite somente o proprietário e o superusuário acessar o
+objeto.  Para permitir que outros papeis acessem o objeto, o comando
+@code{GRANT} deve ser usado juntamente com os seguintes tipos de
+privilégios: @code{SELECT, INSERT, UPDATE, DELETE, TRUNCATE,
+REFERENCES, TRIGGER, CREATE, CONNECT, TEMPORARY, EXECUTE, and USAGE}.
+
+Por exemplo, para atribuir a permissão do usuário @code{alice} poder 
+ executar o comando @code{UPDATE} na tabela @code{saldo}, a seguinte 
+declaração pode ser executada:
+
+@example
+GRANT UPDATE ON saldo TO alice;
+@end example
+
+Para atribuir todos os privilégios para o usuário @code{alice} 
+na tabela @code{inventario}, usamos o comando:
+
+@example
+GRANT ALL ON inventario TO alice;
+@end example
+
+Para revogar algum privilegio concedido, basta executar:
+
+@example
+REVOKE UPDATE ON saldo FROM alice;
+@end example
+
+O nome especial @code{PUBLIC} pode ser usado para conceder 
+privilégios para todos os usuário do sistema. A declaração 
+a seguir concede privilégios de consulta para todos os usuários
+na tabela @code{cidade}:
+
+@example
+GRANT SELECT ON cidade TO PUBLIC;
+@end example
+
+Um objeto pode ser atribuído para um novo usuário usando o comando
+@code{ALTER}.
+
+@section Criação de Grupos
+
+Quando um conjunto de usuários possuem o mesmo perfil, e conveniente
+criar um grupo e inseri-los no grupo. Os grupos são gerenciados usando
+os papeis. O comando @code{GRANT} é usado para adicionar usuários aos
+grupos.
+
+Membros de papeis que possuem o atributo @code{INHERIT} automaticamente 
+herdam as permissões dos papeis do quais são membros. Por exemplo, 
+ supondo que executamos:
+
+@example
+CREATE ROLE beto LOGIN INHERIT;
+CREATE ROLE root NOINHERIT;
+CREATE ROLE toor NOINHERIT;
+GRANT root TO beto;
+GRANT toor TO root;
+@end example
+
+Depois de se conectar como papel @code{beto}, a sessão do banco de
+dados fara uso dos privilégios concedidos a @code{beto} mais as do
+papel @code{root}. Porem, os privilégios do papel @code{toor} não
+estarão disponíveis, apesar de indiretamente @code{beto} fazer parte
+de @code{toor} via @code{root}, @code{root} foi criado com o atributo
+@code{NOINHERIT} que faz com que @code{beto} não herde os atributos
+herdados por @code{root}.
+
+Outra forma de usar os privilégios concedidos a um grupo e através do
+comando @code{SET ROLE grupo}. Ele atribui temporariamente para a sessão
+as permissões do @code{grupo} ao usuário conectado, ao invés do papel
+original do usuário. Qualquer objeto criado é considerado propriedade
+do @code{grupo} e não do usuário. Se o usuário @code{beto} estiver
+conectado e executar a declaração
+
+@example
+SET ROLE toor;
+@end example
+
+@noindent o usuário @code{beto} passa a ter os privilégios concedidos para 
+o papel/grupo @code{toor}, mesmo não herdando diretamente estes
+privilégios. Os privilégios de @code{beto} e @code{root} não são
+concedidos.
+
+Para voltar ao estado original, qualquer uma das declarações a seguir 
+pode ser executada:
+
+@example
+SET ROLE beto;
+SET ROLE NONE;
+RESET ROLE;
+@end example
+
+Os atributos @code{LOGIN, SUPERUSER, CREATEDB} e @code{CREATEROLE} podem
+ser vistos como atributos especiais, que não são herdados
+automaticamente. O comando @code{SET ROLE} deve ser usado para que
+estes atributos tenham efeito. Por exemplo, se o papel @code{root}
+possuir os privilégios @code{CREATEDB} e @code{CREATEROLE}, o usuário
+@code{beto} ao conectar no banco de dados, não tera estes privilégios.
+@code{beto} só os tera se executar o comando @code{SET ROLE root}.
+
+Para remover um papel de grupo, o comando @code{DROP ROLE} pode ser usado. 
+A declaração a seguir remove o papel @code{toor}.
+
+@example
+DROP ROLE toor;
+@end example
+
+Quaisquer objetos cujas permissões são atribuídas para o grupo, devem
+ser transferidas para outro proprietário ou removidas.
+
+@unnumberedsec Exercícios
+
+Para os exercícios a seguir, escreva as declarações @acronym{SQL} que
+executem as operações desejadas no @value{pg}:
+
+@enumerate
+@item Crie um papel chamado @code{admin} que pode conectar no @acronym{SGBD, Sistema Gerenciador de Banco de Dados}, 
+criar bancos de dados, criar papeis, porém, não possua o atributo
+@code{SUPERUSER}.
+@item Crie 2 (dois) papeis @code{usuario1} e @code{usuario2} capazes de conectar no banco de dados.
+@item Crie um esquema chamado @code{rede}, e modifique as permissões para que somente o 
+usuário @code{admin} tenha privilégios de uso sobre os objetos do
+esquema.
+@item Crie uma tabela com a declaração:
+@example
+CREATE TABLE rede.catalogo (
+    id SERIAL,
+    nome TEXT NOT NULL,
+    local TEXT NOT NULL,
+    preco NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    responsavel TEXT NOT NULL DEFAULT session_user,
+    PRIMARY KEY (id)
+);
+@end example
+@noindent e realize as seguintes operações:
+@enumerate
+@item Conceda privilégios para inserir e modificar tuplas nas colunas 
+@code{nome}, @code{local} e @code{preco} da tabela
+@code{rede.catalogo} para o @code{usuario1}.
+@c GRANT USAGE ON catalogue_id_seq TO usuario1;
+@c GRANT INSERT (name, location, price),
+@c   UPDATE (name, location, price) ON rede.catalogo TO usuario;
+@item Conceda privilégios de remoção de entrada na tabela @code{rede.catalogo} 
+para o @code{usuario1}.
+@c GRANT DELETE ON rede.catalogo TO user1;
+@item Crie um banco de dados chamado @code{escola} e mude os privilégios 
+para que somente o @code{usuario1} possa se conectar no banco de dados.
+@c REVOKE CONNECT ON DATABASE escola FROM PUBLIC;
+@c GRANT CONNECT ON DATABASE escola TO user1;
+@end enumerate
+@end enumerate

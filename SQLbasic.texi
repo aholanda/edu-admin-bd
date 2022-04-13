@@ -1,0 +1,464 @@
+@chapter SQL básica
+
+@b{Arquivo:} @uref{@value{urlbase}/empresa.sql,empresa.sql}
+
+A maioria das operações da álgebra relacional e os modelos de dados
+ entidade-relacionamento podem ser mapeados para a linguagem estruturada
+ de consulta (SQL--@i{Strutured Query Language}). Nas próximas seções
+ vamos ver os principais comandos.
+
+Para os comandos SQL utilizaremos a modelagem conforme a Figura a seguir:
+
+@image{empresa,10cm,,,.png}
+
+@section O comando @code{CREATE TABLE}
+
+O comando @code{CREATE TABLE} é utilizado para criar relações
+(tabelas). A partir do exemplo a seguir, vamos explorar os principais
+elementos de sua sintaxe. O comando @code{DROP TABLE} com o final
+@code{CASCADE} antes de cada @code{CREATE TABLE} é utilizado para fazer
+uma limpeza em qualquer elemento com mesmo nome que já exista.
+
+O
+@uref{https://www.postgresql.org/docs/@value{pgversion}/static/datatype.html,tipo
+de dado} de cada atributo deve ser definido, bem como quaisquer tipos
+de restrições de integridade.
+
+
+@subsection Integridade referencial e restrições
+
+A cláusula @b{DEFAULT} atribui um valor padrão se não for atribuído um.
+
+A cláusula @b{UNIQUE} pode ser utilizada para especificar um chave
+secundária.
+
+A cláusula @b{FOREIGN KEY} especifica o atributo em outra relação que
+será referenciado. Devemos informar, se este atributo na outra relação
+for alterado (@code{ON UPDATE}) ou removido (@code{DELETE}), o que
+acontecerá com o atributo em @code{FOREIG KEY}. As seguintes ações podem
+ser tomadas:
+
+@itemize
+@item 
+@code{SET NULL}--o valor nulo será atribuído;
+@item
+@code{SET DEFAULT}--o valor padrão será atribuído;
+@item
+@code{CASCADE ON DELETE}--remove as tuplas referenciadas;
+@item
+@code{CASCADE ON UPDATE}--atualiza as tuplas referenciadas.
+@end itemize
+
+O @value{pg} não possui a ação @code{ON DELETE DEFAULT}, porém, possui a
+ação @code{ON DELETE RESTRICT} que lança um erro se ainda existir
+referências na remoção da chave primária referenciada.
+
+A restrição @code{CHECK} verifica se a condição é obedecida a cada
+alteração dos atributos.
+
+@section Recuperação dos dados
+
+Para recuperação dos dados, o comando @b{SELECT} pode ser usado e sua 
+sintaxe é:
+
+@example
+SELECT <lista de atributos>
+FROM <lista de tabelas>
+WHERE <condição>
+@end example
+
+Vamos realizar uma série de consultas para explorar o comando @b{SELECT}.
+
+@b{S0}. Recuperar a data de nascimento e o endereço do funcionário 
+cujo nome é 'Maria J. Silva'.
+
+@example
+@value{prompt} SELECT data_nasc, endereco FROM Funcionario 
+ WHERE nome='Maria' AND inicio_nome_meio='J' AND sobrenome='Silva'
+@end example
+ 
+
+@b{S1}. Recuperar o nome e endereço de todos os funcionários 
+que trabalham no departamento de Marketing.
+
+@example
+@value{prompt} SELECT nome, sobrenome FROM Funcionario, Departamento 
+ WHERE Departamento.nome='Marketing' AND
+       Departamento.id=Funcionario.id_departamento
+@end example
+ 
+@b{S2}. Para cada projeto, listar o número do departamento que o
+controla, o sobrenome, endereço e a data de nascimento do gerente do
+departamento.
+
+@example
+@value{prompt} SELECT id, sobrenome, endereco, data_nasc 
+ FROM Projeto, Departamento, Funcionario 
+ WHERE  Departamento.id=Funcionario.id_departamento AND cpf_gerente=cpf
+@end example
+
+@subsection Nomes de atributos ambíguos, apelido, renomeação e variáveis de tupla
+
+@b{S8}. Para cada funcionário, recupere o nome e sobrenome do
+funcionário e do supervisor.
+
+@example
+@value{prompt} SELECT F.nome, F.sobrenome, S.nome, S.sobrenome 
+ FROM Funcionario AS F, FUNCIONARIO AS S 
+ WHERE F.cpf_supervisor=S.cpf;
+@end example
+ 
+@subsection Produto cartesiano
+
+@b{S9}.Selecionar todas as combinações CPF de Funcionário e nome de
+Departamento (C10) no banco de dados.
+
+@example
+@value{prompt} SELECT cpf, D.nome FROM Funcionario AS F, Departamento AS D;
+@end example
+
+@subsection Tabelas como conjuntos em SQL
+
+É possível tratar as relações e os resultados das colsultas como
+conjuntos usando os operadores @code{ALL}, @code{ANY}, @code{UNION}
+(união), @code{INTERSECT} (intersecção) e @code{EXCEPT} (diferença).
+
+@b{S10}. Recuperar o salário de cada funcionário.
+
+@example
+@value{prompt} SELECT ALL salario FROM Funcionario;
+@end example
+
+@b{S11}. Recuperar valores distintos dos salários dos funcionários.
+
+@example
+@value{prompt} SELECT DISTINCT salario FROM Funcionario;
+@end example
+
+
+@b{S12}. Fazer uma lista de todos os números de projeto para
+aqueles que envolvam um funcionário cujo sobrenome é 'Silva', seja como
+trabalhador, seja como gerente de departamento que controla o projeto.
+
+@c SELECT DISTINCT P.id
+@c FROM Projeto as P, Funcionario as F, Departamento as D
+@c WHERE P.id_departamento=D.id AND D.cpf_gerente=F.cpf
+@c AND F.sobrenome='Silva'
+@c UNION
+@c SELECT DISTINCT P.id
+@c FROM Projeto AS P, Trabalha_em AS T, Funcionario AS F
+@c WHERE P.id=T.id_projeto AND F.cpf=T.cpf_funcionario;
+
+@subsection Recursos da cláusula @code{WHERE}
+
+@unnumberedsubsubsec Operadores de comparação
+
+São operadores de comparação: @code{=}, @code{<>}, @code{>}, @code{<}, 
+@code{>=} e @code{<=}.
+
+@b{W0}. Recuperar o nome e sobrenome dos funcionários que nasceram antes de 
+1990.
+
+@example
+@value{prompt} SELECT nome, sobrenome FROM Funcionario WHERE data_nasc<'01-01-1990';
+@end example
+
+@b{W1}. Recuperar o nome e sobrenome dos funcionários que ganham mais de
+R$ 40.000,00.
+
+@example
+@value{prompt} SELECT nome, sobrenome FROM Funcionario WHERE salario>40000;
+@end example
+
+@unnumberedsubsubsec Operadores @code{AND}, @code{OR}, @code{NOT}
+
+Os operadores Booleanos têm o significado usual.
+
+@b{W2}. Listar os funcionários que nasceram depois de 1995 e que ganham
+menos de R$ 35.000,00.
+
+@example
+@value{prompt} SELECT * FROM Funcionario
+   WHERE data_nasc>='01-01-1995' AND salario<35000;
+@end example
+
+@unnumberedsubsubsec Operador @code{BETWEEN}
+
+O operador @code{BETWEEN} permite especificar um faixa de valores para
+avaliação na consulta.
+
+@b{W3}. Recuperar todos os funcionários que nasceram na década
+de 1980.
+
+@example
+@value{prompt} SELECT * FROM Funcionario
+   WHERE data_nasc BETWEEN '1980-01-01' AND '1990-01-01';
+@end example
+ 
+@b{W4}. Recuperar todos os funcionário do Departamento 2 que
+ganham entre R$ 20.000,00 e R$ 30.000,00.
+
+@example
+@value{prompt} SELECT * FROM Funcionario
+   WHERE (salario BETWEEN 20000 AND 30000) AND id_departamento=2;
+@end example
+
+@unnumberedsubsubsec Operador @code{IN}, @code{NOT IN}
+
+Os operadores @code{IN} e @code{NOT IN} são usados para verificar se um
+valor está contido em um conjunto de constantes.
+
+@b{W5}. Liste os funcionários cujo sobrenome seja 'Silva', 'Sousa' ou
+'Moura'.
+
+@example
+ @value{prompt} SELECT * FROM Funcionario
+    WHERE sobrenome IN ('Silva', 'Sousa', 'Moura');
+@end example
+
+@unnumberedsubsubsec Operador @code{LIKE}
+
+O operador @code{LIKE} realiza casamento de padrões durante a consulta.
+O operador @code{%} casa zero ou mais caracteres quaisquer.
+
+@b{W6}. Recuperar todos os functionários cujo endereço esteja
+em São Paulo.
+
+@example
+@value{prompt} SELECT * FROM Funcionario WHERE endereco LIKE '%São Paulo%';
+@end example
+
+@subsection Ordenação do resultado das consultas
+
+A cláusula @code{ORDER BY} define critérios de ordenação das tuplas a
+partir de uma ou mais colunas. É possível especificar mais de uma coluna
+para ordenação.
+
+@b{O0}. Retornar a listagem dos funcionários e o projeto em que
+trabalham, ordenada por departamento e dentro de cada departamento,
+ordenada por sobrenome, depois pelo nome.
+
+@c SELECT D.nome, F.sobrenome, F.nome, P.nome
+@c FROM Departamento as D, Funcionario as F, Projeto as P,
+@c Trabalha_em as T
+@c WHERE D.id = F.id_departamento AND F.cpf=T.cpf_funcionario
+@c AND T.id_projeto=P.id
+@c ORDER BY D.nome, F.sobrenome, F.nome
+
+@subsection Funções de agregação na cláusula @code{SELECT}
+
+SQL possui funções utilizadas para obter valores estatísticos a partir
+dos valores das colunas.
+
+@b{A0}. A função @code{COUNT()} retorna o número de funcionários.
+
+@example
+@value{prompt} SELECT COUNT(*) FROM Funcionario;
+@end example
+
+@b{A1}. A função @code{MAX()} retorna o maior salário dos funcionários.
+
+@example
+@value{prompt} SELECT MAX(salario) FROM Funcionario;
+@end example
+
+@b{A2}. A função @code{MIN()} retorna o menor salário dos funcionários.
+
+@example
+@value{prompt} SELECT MIN(salario) FROM Funcionario;
+@end example
+
+@b{A3}. A função @code{SUM()} retorna o soma dos salários dos
+funcionários.
+
+@example
+@value{prompt} SELECT SUM(salario) FROM Funcionario;
+@end example
+
+@b{A4}. A função @code{AVG()} retorna o média de salário dos
+funcionários.
+
+@example
+@value{prompt} SELECT AVG(salario) FROM Funcionario;
+@end example
+
+@section Instruções @code{INSERT}, @code{DELETE} e @code{UPDATE}
+
+@subsection O comando @code{INSERT}
+
+O comando @code{INSERT} adiciona tuplas nas relações do banco de dados.
+
+Examplo:
+
+@b{I0}. Inserir um entrada representando o Departamento de 'Marketing'
+com identificação igual a 2 e CPF do gerente igual a '12345678966'.
+
+@example
+@value{prompt} INSERT INTO Departamento(id, nome, cpf_gerente)
+               VALUES(2, 'Marketing', '12345678966');
+@end example
+
+@subsection O comando @code{DELETE}
+
+O comando @code{DELETE} remove tuplas de uma relação.
+
+Exemplos:
+
+@c{D0}. Remove os funcionários com sobrenome igual a 'Silva'.
+
+@example
+@value{prompt} DELETE FROM Funcionario WHERE sobrenome='Silva';
+@end example
+
+@b{D1}. Remove o funcionário com CPF='12141678166'.
+
+@example
+@value{prompt} DELETE FROM Funcionario WHERE cpf='12141678166';
+@end example
+
+@b{D2}. Remove todos os funcionário do Departamento 1.
+
+@example
+@value{prompt} DELETE FROM Funcionario WHERE id_departamento=1;
+@end example
+
+@b{D3}. Remove todos os funcionários.
+
+@example
+@value{prompt} DELETE FROM Funcionario;
+@end example
+
+@subsection O comando @code{UPDATE}
+
+O comando @code{UPDATE} é usado para modificar o valor de uma ou mais
+tuplas.
+
+Examplos:
+
+@b{U0}. Reajustar em 10% o salário dos funcionários do Departamento 2.
+
+@example
+@value{prompt} UPDATE Funcionario SET salario=salario*1.1 WHERE id_departamento=2;
+@end example
+
+@b{U1}. Alterar o endereço do funcionário com CPF='39146668786' para
+ 'Rua dos Monges 222 - Osasco, SP'.
+
+@example
+@value{prompt} UPDATE Funcionario
+SET endereco='Rua dos Monges 222 - Osasco, SP' WHERE cpf='39146668786';
+@end example
+
+@unnumberedsec EXERCÍCIOS
+
+@b{1.} Carregue o arquivo @uref{@value{urlbase}/empresa.sql,empresa.sql}
+ no PostgreSQL em um banco de dados chamado @code{empresa}, e realize as
+ seguintes consultas:
+
+@image{empresa,10cm,,,.png}
+
+@enumerate a
+@item
+Listar todas as horas trabalhadas e as horas trabalhadas sem
+repetição.
+@item
+Calcular o número total de horas gastas no Produto A.
+@item
+Listar o nome e sobrenome de todos os funcionários que são
+supervisionados por Fernando Wong.
+@item
+Faça uma consulta de todos os funcionários que residam na 'Rua das
+Flores', na cidade de 'São Paulo'.
+@item
+Verifique quantos funcionários nasceram entre 1985 e 1995.
+@item
+Recupere o nome de todos os funcionários que trabalharam mais de 8 horas no
+desenvolvimento do Produto A.
+@item
+Recupere o nome de todos os funcionários que trabalharam mais de 8 horas
+no desenvolvimento do Produto A @b{ou} mais de 10 horas no desenvolvimento do
+produto B.
+@item
+Recupere o nome de todos os funcionários que trabalharam mais de 8 horas
+no desenvolvimento do Produto A @b{e} mais de 10 horas no desenvolvimento do
+produto B.
+@end enumerate
+
+
+@b{2.} (Evandro E. S. Ruiz.) Carregue o arquivo
+@uref{@value{urlbase}/varejao.sql,varejao.sql} no PostgreSQL em um
+banco de dados chamado @code{varejao} e realize as seguintes consultas:
+
+@image{varejao,10cm,,,.png}
+
+@enumerate a
+@item
+Selecionar todos os produtos e os valores de todos os seus atributos.
+@item
+Selecionar os códigos dos produtos vendidos desde 1999-04-01, os códigos
+dos compradores que os compraram, as datas destas vendas e os
+respectivos valores.
+@item
+Selecionar as vendas cuja quantidade seja superior a 50 e inferior a 200
+ou cujo valor da venda não seja inferior a 60000, indicando os códigos
+dos produtos vendidos, os códigos dos compradores que os compraram, as
+quantidades vendidas e os respectivos valores.
+@item
+Selecionar as vendas cuja quantidade não seja superior a 50 e inferior a 200 e cujo
+valor da venda seja inferior a 60000, indicando os códigos dos produtos vendidos, os
+códigos dos compradores que os compraram, as quantidades vendidas e os respectivos
+valores.
+@item
+Selecionar o nome, a especialidade e a data de nascimento dos empregados cuja
+especialidade é hortelão ou jardineiro.
+@item
+Selecionar o nome, a especialidade e a data de nascimento dos empregados cuja
+especialidade é hortelão ou jardineiro ou cuja data de nascimento esteja entre
+1955-01-01 e 1965-12-31.
+@item
+Selecionar o nome, a especialidade e a data de nascimento dos empregados cujo
+nome começa por 'J'.
+@item
+Selecionar o nome, a especialidade e a data de nascimento dos empregados cujo
+nome não começa por 'J'.
+@item
+Selecionar os valores de vendas que não estejam ainda pagas e os códigos dos
+respectivos compradores.
+@item
+Para cada produto selecionar a designação, a área e o número, nome e
+especialidade do respectivo responsável.
+@item
+Selecionar o número, nome e especialidade dos empregados que são responsáveis
+por algum produto.
+@item
+Selecionar as designações dos produtos dos quais já se tenham efetuado vendas, e o
+nome e a especialidade dos respectivos reponsáveis.
+@item
+Para cada produto selecionar a designação, a área e o número, nome e especialidade do
+respectivo responsável. O resultado deve ser apresentado por ordem descrescente do
+código do empregado e por ordem crescente da área do produto.
+@item
+Para cada produto cujo responsável tem a especialidade 'engenheiro
+agrônomo', selecionar a designação, a área e o número, nome e
+especialidade do respectivo responsável. O resultado deve ser
+apresentado por ordem descrescente da área do produto.
+@item
+Para cada produto, selecionar a designação, a área e o nome e especialidade do
+respectivo responsável.
+@c @item
+@c Selecionar a área total de todos os produtos, a área média por produto e o número de
+@c produtos existentes.
+@c @item
+@c Para cada produto selecionar o respectivo código, número de vendas e a quantidade
+@c total dessas vendas.
+@c @item
+@c Para cada produto com vendas não pagas selecionar o respectivo código,
+@c número de vendas por pagar e a quantidade total dessas vendas.
+@c @item
+@c Para cada produto com vendas não pagas numa qantidade total superior ou
+@c igual a 250 selecionar o respectivo código, número de vendas por pagar e
+@c a quantidade total dessas vendas.
+@c @item
+@c Selecionar os códigos e as identificações de todos os compradores e
+@c fornecedores indicando os que são clientes e os que são fornecedores.
+@end enumerate

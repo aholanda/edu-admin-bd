@@ -1,0 +1,309 @@
+%\examheader{Administração de Banco de Dados}{EXAME}{15/12/2015}
+
+\question{5}~Crie uma tabela usando a declaração SQL a seguir:
+
+\begin{verbatim}
+CREATE TABLE produto (id SERIAL, categoria CHAR, preco REAL );
+\end{verbatim}
+
+\noindent e insira os valores
+
+\begin{verbatim}
+INSERT INTO produto(categoria,preco) VALUES('A', 120);
+INSERT INTO produto(categoria,preco) VALUES('B', 240);
+INSERT INTO produto(categoria,preco) VALUES('C', 360);
+INSERT INTO produto(categoria,preco) VALUES('D', 440);
+INSERT INTO produto(categoria,preco) VALUES('A', 80);
+INSERT INTO produto(categoria,preco) VALUES('C', 200);
+INSERT INTO produto(categoria,preco) VALUES('B', 300);
+\end{verbatim}
+
+\noindent Faça um função que atualize o preço do produto de acordo
+com a categoria.
+
+\bigskip
+\noindent Para as tabelas
+
+\begin{verbatim}
+CREATE TABLE functionario(id SERIAL PRIMARY KEY, nome VARCHAR(128) NOT NULL);
+CREATE TABLE auditoria(
+       id SERIAL PRIMARY KEY, 
+       produto_id INT REFERENCES produto(id) NOT NULL, 
+       funcionario_id INT REFERENCES funcionario(id) NOT NULL,
+       data_alteracao TIMESTAMP NOT NULL
+);
+\end{verbatim}
+
+\noindent faça um função que armazene na tabela {\tt auditoria}
+todas alterações realizadas na tabela {\tt produto}, com o {\tt id}
+do funcionário que realizou a alteração e data.
+
+
+\end{document}
+
+\question{5} Escreva as declarações SQL que executem as tarefas a seguir:
+
+\begin{enumerate}[a)]
+\item Criar um usuário chamado {\tt chico} que possa se conectar, 
+criar banco de dados e que transmita atributos (herança).
+\item Crie um banco de dados chamado {\tt loja} e conceda permissões 
+de administração para o usuário {\tt chico}.
+\item Crie um grupo chamado {\tt vendas} que não transmita atributos (herança) 
+e adicione o usuário {\tt chico} nele.
+\item Crie um grupo chamado {\tt marketing} que não transmita atributos (herança) e adicione o grupo vendas nele.
+\item Crie um usuario {\tt leitor} com permissão de conexão e que transmita atributos. Crie a tabela {\tt venda} do exercício anterior no banco de dados {\tt loja} e conceda somente privilégios de leitura para o usuário {\tt leitor}.
+\end{enumerate} 
+
+\question{3} Desejamos armazenar o número de visitas às diferentes
+páginas web de uma empresa. Para isso, criamos a tabela a seguir:
+
+\begin{verbatim}
+CREATE TABLE paginaweb (
+       url VARCHAR(256) PRIMARY KEY,
+       visitas INT NOT NULL
+);
+\end{verbatim}
+
+O problema ao armazenar as visitas é que o servidor web normalmente é
+multi-thread, ou seja, atende a várias requisições simultaneamente. Assim,
+a conconrrência de acesso deve ser levada em conta durante a atualização
+do número de visitas.
+
+Para as declarações SQL a seguir:
+
+\begin{verbatim}
+INSERT INTO paginaweb VALUES('prova.com', 333); -- valor inicial
+\end{verbatim}
+
+\begin{center}
+\begin{tabular}{l|l}\hline
+\bf \hfil Cliente 1 &\bf Cliente 2 \\\hline
+ & \tt BEGIN \$mode;\\
+ \tt BEGIN \$mode; & \\
+\tt UPDATE paginaweb SET visitas = visitas + 1 &\\
+\tt WHERE url = 'prova.com' & \\
+ & \\
+ & \tt UPDATE paginaweb SET visitas = visitas + 1 \\
+ & \tt WHERE url = 'prova.com'  \\
+\tt COMMIT; &\\
+ &\tt COMMIT \\\hline
+\end{tabular}
+\end{center}
+
+O que ocorrerá com o valor do campo {\tt visitas} se a variável
+{\tt \$mode} receber os seguintes valores:
+
+\begin{enumerate}[a)]
+\item {\tt ''};
+\item {\tt 'TRANSACTION ISOLATION LEVEL REPEATABLE READ'};
+\item {\tt 'TRANSACTION ISOLATION LEVEL SERIALIZABLE'}?
+\end{enumerate}
+
+\question{2} Usando o exemplo do exercício anterior, a aplicação
+no cliente pode executar as declarações da seguinte forma: 
+
+\begin{center}
+\begin{tabular}{l|l}\hline
+\bf \hfil Cliente 1 &\bf Cliente 2 \\\hline
+ & \tt BEGIN \$mode; \\
+ \tt BEGIN \$mode; & \\
+\tt SELECT visitas FROM paginaweb & \\
+\tt WHERE url = 'prova.com'; & \\
+\tt -- cacula visitas internamente & \\
+\tt -- \$novo\_valor = \$visitas + 1; & \\
+\tt UPDATE paginaweb SET visitas = \$novo\_valor &\\
+\tt WHERE url = 'prova.com' & \\
+ & \\
+ & \\
+&\tt SELECT visitas FROM paginaweb  \\
+&\tt WHERE url = 'prova.com';  \\
+&\tt -- cacula visitas internamente  \\
+&\tt -- \$novo\_valor = \$visitas + 1;  \\
+ & \tt UPDATE paginaweb SET visitas = \$novo\_valor \\
+ & \tt WHERE url = 'prova.com'  \\
+\tt COMMIT; &\\
+ &\tt COMMIT \\\hline
+\end{tabular}
+\end{center}
+
+O que ocorrerá com o valor do campo {\tt visitas} se a variável
+{\tt \$mode} receber os seguintes valores:
+
+\begin{enumerate}[a)]
+\item {\tt ''};
+\item {\tt 'TRANSACTION ISOLATION LEVEL REPEATABLE READ'};
+\item {\tt 'TRANSACTION ISOLATION LEVEL SERIALIZABLE'}?
+\end{enumerate}
+
+\question{2} Se no exercício anterior for utilizado o comando
+{\tt SELECT ... FOR UPDATE} ao invés de apenas {\tt SELECT}, qual
+será o efeito sobre o valor de {\tt visita} para os níveis de isolamento
+dos itens a) e b)?
+
+\vfil Para pensar: Usando o nível de isolamento {\tt TRANSACTION ISOLATION LEVEL SERIALIZABLE}, 
+é provocado erro se houver tentativa de atualização de 2 transações
+concorrentes.  Pense em como este erro poderia ser tratado, para que a
+atualização na transação em que o erro foi lançado possa ocorrer após
+o término da transação concorrente. Esta solução para o acesso
+concorrente é chamada de bloqueio otimista, enquanto que o bloqueio
+realizado usando {\tt SELECT ... FOR~UPDATE} é chamado de pessimista.
+
+\end{document}
+
+\question{4} Um banco de dados possui uma tabela chamada {\tt aluno}
+que possui um campo {\tt id} do tipo inteiro de 4 bytes, além de
+outros campos. Supondo que neste banco de dados o campo {\tt id} é
+chave primaria e automaticamente é indexada por uma árvore B de
+ordem~{\bf 5}.  Responda às seguintes questões:
+
+\begin{enumerate}[a)]
+\item {\tt [3]} Construa a árvore gerada após a inserção dos
+  seguintes valores: 70, 83, 81, 75, 67, 76, 72, 84, 86, 87, 77, 82,
+  80, 65, 66, 88, 89, 68, 90, 69, 8, 49, 34, 23, 20, 28, 50, 11 e 102.
+
+\item {\tt [1]} Calcule o espaço ocupado pelo índice se o ponteiro
+  para as subárvores ocupar 4 bytes.
+\end{enumerate}
+
+\question{2} Para o exercício anterior, se a tabela {\tt aluno}, além
+de {\tt id}, conter os campos {\tt nome} (32 bytes), {\tt endereço}
+(40 bytes), {\tt sexo} (1 byte), {\tt departamento} (16 bytes), {\tt
+  CPF} (9 bytes), {\tt data\_de\_nascimento} (8 bytes) e {\tt
+  data\_de\_admissão} (8 bytes), quantas páginas de 8.192 bytes serão
+ocupadas se a tabela possuir 40.000 registros?
+
+
+\question{1} Quais são os 3 métodos de varreduras no PostgreSQL?
+
+\begin{enumerate}[a)]
+\item sequencial, indexada com índices primários e mapa de bits, indexada com índices secundários
+\item indexada com índices primários, sequencial, indexada com índices secundários
+\item sequencial, indexada com árvore B, indexada com árvore B e mapa de bits
+\item ordenada, indexada com árvore binária, indexada com índices secundários
+\item ordenada, indexada com árvore B, indexada com índices primários
+\end{enumerate}
+
+\question{1} A seguir são listadas 2 séries de operações concorrentes
+em um banco de dados PostgreSQL sobre a tabela {\tt bar} que
+possui somente o campo {\tt id} do tipo inteiro. Descrever o que
+ocorre na série de operações da direita que provoca sua espera.
+
+\begin{minipage}[h]{.5\linewidth}
+\begin{verbatim}
+postgres=# BEGIN;
+
+postgres=# UPDATE bar SET id=id+1;
+UPDATE 1
+
+
+
+
+postgres=# COMMIT;
+COMMIT
+\end{verbatim}
+\end{minipage}
+\begin{minipage}[h]{.5\linewidth}\vspace{1.5cm}
+\begin{verbatim}
+postgres=# BEGIN;
+
+
+
+
+postgres=# UPDATE bar SET id=id+1;
+-- espera
+-- espera
+-- espera
+UPDATE 1
+postgres=# COMMIT;
+\end{verbatim}
+\end{minipage}
+
+
+\pagebreak \question{2} {\tt [1]} As 2 séries de operações
+concorrentes em um banco de dados PostgreSQL listadas a seguir ocorrem
+sobre a tabela {\tt custo} que possui os campos {\tt id} e {\tt
+  valor}, ambos do tipo inteiro. Explicar o que ocorre na série de
+operações da direita que provoca o erro. {\tt [1]} Como este erro
+poderia ser evitado?
+
+\bigskip\footnotesize
+\begin{minipage}[h]{.5\linewidth}
+\begin{verbatim}
+-- transação A
+postgres=# BEGIN;
+BEGIN
+postgres=# UPDATE custo SET valor=valor-100 
+           WHERE id = 1;
+UPDATE 1
+postgres=# UPDATE custo SET valor=valor+100 
+           WHERE id = 2;
+-- espera
+-- espera
+-- espera
+-- espera
+-- espera
+
+UPDATE 1
+\end{verbatim}
+\end{minipage}
+\begin{minipage}[h]{.5\linewidth}
+\begin{verbatim}
+-- transação B
+postgres=# BEGIN;
+BEGIN
+postgres=# UPDATE custo SET valor=valor-150 
+           WHERE id = 2;
+
+
+
+UPDATE 1
+postgres=# UPDATE custo SET valor=valor+150 
+           WHERE id = 1;
+ERROR:  deadlock detected
+DETAIL:  Process 6633 waits for ShareLock on transaction 11960; 
+ blocked by process 7735.
+Process 7735 waits for ShareLock on transaction 11961; 
+ blocked by process 6633.
+HINT:  See server log for query details.
+
+\end{verbatim}
+\end{minipage}
+
+
+Para responder às questões a seguir, execute o seguinte comando no
+shell do linux:
+
+\begin{verbatim}
+$ curl --proxy-negotiate -u labfafram1 -s holanda.xyz/files/cidades.sql 2>&1 | psql
+\end{verbatim}
+
+\question{2} Qual o tipo de varredura e o custo das seguintes consultas:
+
+\begin{enumerate}[a)]
+\item {\tt SELECT nome FROM estado WHERE uf = 'AM';}
+\item {\tt SELECT C.* FROM cidade AS C, estado AS E WHERE C.estado\_id=E.id AND E.nome= 'Acre';}
+\end{enumerate}
+
+\question{2} Qual a expressão SQL para criar índice para o campo {\tt
+  uf} da tabela {\tt estado}? Escreva a expressão SQL que verifica o
+espaço em disco ocupado pelo índice criado. Qual foi este espaço em
+MB?
+
+\question{1} Descreva se houve e quais foram as alterações para o
+resultado da questão~1, com a adição do índice.
+
+\question{1} Escreva a expressão SQL que cria uma visão para listar todas as 
+cidades que pertencem ao estado de Goiás e do Distrito Federal.
+
+\question{1} Escreva a expressão SQL que declara um cursor para a
+listagem de todas as cidades do estado do Rio de Janeiro. Escreva a
+expressão SQL que percorra 20 cidades por vez usando o cursor criado.
+
+\question{1} Escreva a expressão SQL que modifica o {\tt id} da cidade
+de São Paulo dentro de um transação.
+
+\question{2} Escreva as expressões SQL para a criação de um esquema
+chamado {\tt teste} que deverá conter a tabela {\tt estado}, sem o
+campo {\tt pais\_id}.
+
+

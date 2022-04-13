@@ -1,0 +1,70 @@
+@chapter Backups
+
+@section Usando @command{pg_dump}
+
+@command{pg_dump} é usado para realizar @emph{backups} no banco de
+dados @value{pg}. Ele lida com @emph{backups} em formato texto e
+binário. Por exemplo, para realizar o @emph{backup} do banco de dados
+@code{teste}, executamos no terminal (não no cliente do @value{pg}):
+
+@example
+pg_dump teste > /tmp/teste.sql
+@end example
+
+O comando @command{pg_dump} é executado como se fosse uma longa
+transação com nível de isolamento @code{REPEATABLE READ}, ou seja,
+qualquer alteração depois do início do @emph{backup} não será
+armazenada.
+
+Para restaurar o @emph{backup} podemos executar
+
+@example
+psql novo_teste < /tmp/teste.sql
+@end example
+
+@emph{Blobs} não são incluídos automaticamente no @emph{backup}. A opção
+ @option{-b} ou @option{--blob} para assegurar que o @emph{backup}
+ contem os @emph{blobs}.
+
+@section Formato Compactado
+
+As desvantagens de realizar @emph{backups} usando o formato texto é que
+eles tendem a ser grandes e torna difícil a extração de um subconjunto
+dos dados. Um formato proprietário do @value{pg} pode ser utilizado
+para realização de @emph{backups} da seguinte forma:
+
+@example
+pg_dump teste -Fc > /tmp/teste.fc
+@end example
+
+A opção @option{-Fc} é utilizada para criar o formato proprietário que
+além de ser compactado, possui uma tabela de conteúdo para facilitar a
+extração de subconjuntos dos dados. Para listar o conteúdo executamos 
+
+@example
+pg_restore --list /tmp/teste.fc
+@end example
+
+Supondo que o @emph{backup} possui a tabela @code{venda} nele, para 
+extraí-la podemos executar:
+
+@example
+pg_restore -t venda /tmp/venda.fc
+@end example
+
+Para carregar a tabela no banco de dados, as duas opções a seguir são
+válidas:
+
+@example
+pg_restore -t novo_teste /tmp/teste.fc | psql venda
+pg_restore -t novo_teste /tmp/teste.fc -d venda
+@end example
+
+A opção @option{-j} faz com que o número de CPUs fornecido 
+como argumento para a opção seja utilizado. O comando
+
+@example
+pg_restore -j 4 -t novo_teste /tmp/teste.fc -d venda
+@end example
+
+@noindent faz com que 4 CPUs sejam usadas para restaurar o @emph{bakup}.

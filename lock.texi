@@ -1,0 +1,231 @@
+@chapter Bloqueio
+
+@section Bloqueio usando o Modo `FOR UPDATE`
+
+Vamos criar uma tabela para realizar os testes 
+
+@example
+postgres=# CREATE TABLE nofu_teste (id int, saldo int);
+@end example
+
+e inserir valores iniciais
+
+@example
+postgres=# INSERT INTO nofu_teste VALUES (1234, 1000);
+@end example
+
+Devido à possibilidade de leitura concorrente no PostgreSQL, as
+seguintes consultas pode ter resultados indesejados:
+
+@example
+@multitable @columnfractions .49 .49
+@headitem Usuário 1
+@tab Usuário 2
+@item BEGIN;
+@tab
+@item SELECT saldo FROM nofu_teste 
+@tab
+@item WHERE id = 1234;
+@tab
+@item -- saldo = 1000
+@tab
+@item
+@tab BEGIN;
+@item
+@tab SELECT saldo FROM nofu_teste 
+@item
+@tab WHERE id = 1234;
+@item
+@tab -- saldo = 1000
+@item
+@tab  UPDATE nofu_teste SET saldo = saldo - 300 
+@item 
+@tab   WHERE id = 1234;
+@item COMMIT;
+@tab
+@item 
+@tab COMMIT; 
+@end multitable
+@end example
+
+Uma transação como esta não é segura, pois após o @code{SELECT}
+o valor do campo @code{saldo} foi alterado pelo usuário 2, e se
+o usuário 1 utilizar o valor lido na aplicação, estará trabalhando com
+um valor desatualizado, conduzindo a inconsistências.
+
+A solução é bloquear a tupla usando @code{FOR UPDATE},
+ criando a tabela @code{fu_teste} com o mesmo valor inicial
+ de @code{nofu_teste}:
+
+@example
+CREATE TABLE fu_teste (id int, saldo int);
+INSERT INTO fu_teste VALUES (1234, 1000);
+@end example
+
+@example
+@multitable @columnfractions .49 .49
+@headitem Usuário 1
+@tab Usuário 2
+@item BEGIN;
+@tab
+@item SELECT saldo FROM fu_teste 
+@tab
+@item WHERE id = 1234 FOR UPDATE;
+@tab
+@item -- saldo =  1000    
+@tab
+@item
+@tab BEGIN;
+@item
+@tab SELECT saldo FROM fu_teste 
+@item
+@tab  WHERE id = 1234 FOR UPDATE;
+@item 
+@tab
+@item UPDATE fu_teste SET saldo = saldo - 300 
+@tab
+@item WHERE id = 1234;
+@tab
+@item
+@tab  -- espera...
+@item COMMIT; 
+@tab
+@item
+@tab -- saldo = 700
+@item
+@tab UPDATE fu_teste SET saldo = saldo + 250
+@item
+@tab  WHERE id = 1234;
+@item
+@tab SELECT saldo FROM fu_teste 
+@item
+@tab WHERE id = 1234 FOR UPDATE;
+@item
+@tab  -- saldo = 950
+@item
+@tab COMMIT; 
+@end multitable
+@end example
+
+Como o usuário 1 adquiriu o bloqueio da tupla para o @code{id = 1234}
+primeiro que o usuário 2 usando o @code{FOR UPDATE}, o bloqueio do usuário
+2 só é efetuado quando a transação do usuário 1 estiver sido
+completada, garantindo a leitura do valor correto para modificação.
+
+@c @section Inspecionando Bloqueios
+
+@c As vezes é necessário inspecionar os bloqueios para verificar
+@c pendências que possam estar bloqueando outras operações. Nesta seção
+@c iremos aprender como detectar as transações bloqueadas.
+
+@c Vamos criar uma tabela chamada @code{l_teste} e gerar uma serie de 
+@c 1 a 10 para inserir na tabela:
+
+@c @example
+@c   CREATE TABLE l_teste AS SELECT * FROM generate_series(1,10) AS id;
+@c @end example
+
+@c Vamos executar duas consultas concorrentes para inspecionar os bloqueios:
+
+@c @example
+@c   BEGIN;
+@c   SELECT * FROM l_teste WHERE id > 9 FOR UPDATE;
+@c @end example
+
+@c @noindent e em outro cliente executamos:
+
+@c @example
+@c   BEGIN;
+@c   SELECT * FROM l_teste WHERE id > 8 FOR UPDATE;
+@c @end example
+
+@c @noindent que ficara bloqueada devido a primeira consulta.
+
+@c Vamos verificar as operações ativas na tabela @code{pg_stat_activity}:
+
+@c @example
+@c   SELECT pid, query, waiting FROM pg_stat_activity;
+
+@c   pid  |                       query                       | waiting 
+@c -------+---------------------------------------------------+---------
+@c  27649 | SELECT * FROM l_teste WHERE id > 8 FOR UPDATE;    | t
+@c  27670 | SELECT pid, query, waiting FROM pg_stat_activity; | f
+@c (2 rows)
+
+@c @end example
+
+@c Verificamos que a transação @code{27649} esta esperando algo pois 
+@c o valor do campo @code{waiting} e @code{t}rue, que é o sinal de que 
+@c uma transação está emperrada. Vamos inspecionar a visão @code{pg_locks} 
+@c para extrair informações adicionais. 
+
+@c @example
+@c   SELECT locktype, granted, transactionid, mode FROM pg_locks 
+@c         WHERE granted = 'f';
+@c @end example
+
+@c @noindent
+
+@c @example
+@c    locktype    | granted | transactionid |   mode    
+@c ---------------+---------+---------------+-----------
+@c  transactionid | f       |         12027 | ShareLock
+@c (1 row)
+
+@c @end example
+
+@c A transação  com identifica-o @code{12027} está esperando a liberação 
+@c de um bloqueio. Podemos obter mais informações sobre a transação 
+@c com a consulta:
+
+@c @example
+@c SELECT  granted, transactionid, mode, pid FROM pg_locks 
+@c         WHERE transactionid = 12027;
+@c @end example
+
+@c @example
+@c granted | transactionid |     mode      |  pid  
+@c ---------+---------------+---------------+-------
+@c  t       |         12027 | ExclusiveLock | 27670
+@c  f       |         12027 | ShareLock     | 27649
+@c (2 rows)
+
+@c @end example
+
+@c Ha dois processos relacionados com a transação @code{12027}. O processo
+@c @code{27649} esta bloqueado esperando a liberação do processo @code{27670}.
+
+@c Podemos verificar a tupla que esta causando o conflito com a consulta:
+
+@c @example
+@c   SELECT pid, relation, page, tuple FROM pg_locks 
+@c         WHERE page IS NOT NULL;
+@c @end example
+
+@c @example
+@c   pid  | relation | page | tuple 
+@c -------+----------+------+-------
+@c  27649 |    17416 |    0 |    10
+@c (1 row)
+
+@c @end example
+
+@c O bloqueio está na decima tupla da pagina @code{0} na relação
+@c @code{17416}. O processo @code{27649} está esperando naquela tupla.
+
+@c O processo que está bloqueado pode ser encerrado usando o comando
+
+@c @example
+@c   SELECT pg_terminate_backend(27670);
+@c @end example
+
+@c @noindent que encerra o processo @code{27670} e permite que o processo
+@c @code{27649} adquira o bloqueio.
+
+@unnumberedsec Exercício
+
+@enumerate
+@item Escreva as declarações SQL para atualização com bloqueio da tabela @code{fu_teste},
+utilizando @code{LOCK TABLE} ao invés de @code{SELECT ... FOR UPDATE}. Cite as
+principais vantagens e desvantagens.
+@end enumerate

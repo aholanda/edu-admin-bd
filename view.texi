@@ -1,0 +1,134 @@
+@chapter Visão
+
+Para mostrar o uso do comando visão vamos carregar o banco de dados
+@value{pg} com a lista de cidades brasileiras:
+
+@example
+$ curl -s holanda.xyz/files/cidades.sql 2>&1 | psql
+@end example
+
+Vamos listar as 5 primeiras cidades do estado de São Paulo:
+
+@example
+SELECT C.* FROM cidade AS C, estado AS E WHERE C.estado_id=E.id AND E.nome= 'São Paulo' LIMIT 5;
+
+  id  |       nome       | estado_id 
+------+------------------+-----------
+ 4706 | Adamantina       |        26
+ 4707 | Adolfo           |        26
+ 4708 | Aguaí            |        26
+ 4709 | Águas da Prata   |        26
+ 4710 | Águas de Lindóia |        26
+(5 rows)
+
+@end example
+
+Podemos criar um atalho para esta consulta utilizando a visão da seguinte forma:
+
+@example
+CREATE VIEW cidades_sp AS SELECT C.* FROM cidade AS C, estado AS E 
+        WHERE C.estado_id=E.id AND E.nome= 'São Paulo';
+@end example
+
+Vamos listar as cidades do estado de São Paulo usando a visão:
+
+@example
+SELECT * FROM cidades_sp LIMIT 5;
+  id  |       nome       | estado_id 
+------+------------------+-----------
+ 4706 | Adamantina       |        26
+ 4707 | Adolfo           |        26
+ 4708 | Aguaí            |        26
+ 4709 | Águas da Prata   |        26
+ 4710 | Águas de Lindóia |        26
+(5 rows)
+
+@end example
+
+Informações sobre a visão @code{cidades_sp} pode ser obtida pelo comando:
+
+@example
+@backslashchar{}d cidades_sp;
+            View "public.cidades_sp"
+  Column   |          Type          | Modifiers 
+-----------+------------------------+-----------
+ id        | integer                | 
+ nome      | character varying(120) | 
+ estado_id | integer                | 
+
+@end example
+
+A visão é somente uma tabela virtual, onde operações de inserção e
+remoção não podem ser executadas se a visão for formada por várias
+tabelas. Para demonstrar isto temos:
+
+@example
+INSERT INTO cidades_sp(id,nome,estado_id) VALUES(DEFAULT, 'Foolândia', 26);
+
+ERROR:  cannot insert into view "cidades_sp"
+DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+HINT:  To enable inserting into the view, provide an INSTEAD OF INSERT trigger or 
+       an unconditional ON INSERT DO INSTEAD rule.
+@end example
+
+Porém, se criarmos uma visão de somente uma tabela, tal como:
+
+@example
+CREATE TABLE planeta(nome VARCHAR(16));
+@end example
+
+E inserirmos valor
+
+@example
+INSERT INTO planeta VALUES('Terra');
+@end example
+
+Podemos criar uma visão para a listagem dos planetas
+
+@example
+CREATE VIEW visao_planetas AS SELECT * FROM planeta;
+@end example
+
+Ao executá-la
+
+@example
+SELECT * FROM visao_planetas;
+ nome  
+-------
+ Terra
+(1 row)
+
+@end example
+
+Podemos inserir um valor usando a visão, pois a consulta ocorre somente em uma tabela:
+
+@example
+INSERT INTO visao_planetas VALUES('Saturno');
+@end example
+
+@example
+SELECT * FROM visao_planetas;
+
+  nome   
+---------
+ Terra
+ Saturno
+(2 rows)
+
+@end example
+
+O mesmo acontece para a remoção de entradas:
+
+@example
+DELETE FROM visao_planetas WHERE nome='Terra';
+@end example
+
+@example
+SELECT * FROM visao_planetas;
+
+  nome   
+---------
+ Saturno
+(1 row)
+
+@end example

@@ -1,0 +1,64 @@
+@chapter Cursor
+
+O uso do @strong{cursor} é uma forma de evitar que grandes quantidades de
+dados vão para o cliente que fez a consulta de um só vez.
+
+Como exemplo vamos criar uma tabela com 16 entradas
+
+@example
+CREATE TABLE t_teste AS SELECT * FROM generate_series(1, 16) AS x;
+@end example
+
+@noindent e criar um cursor para percorrer as entradas da tabela
+dentro de um transação que inicia em @code{BEGIN}
+
+@example
+BEGIN;
+DECLARE cur_teste CURSOR FOR SELECT * FROM t_teste;
+@end example
+
+@noindent e acessar o resultado da colsulta usando o cursor
+
+@example
+FETCH NEXT FROM cur_teste;
+
+ x 
+---
+ 1
+(1 row)
+@end example
+
+Para acessar um número de maior de entradas inserimos o número 
+após @code{FETCH} e removemos @code{NEXT}:
+
+@example
+FETCH 8 FROM cur_teste;
+
+ x 
+---
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+(8 rows)
+
+@end example
+
+Para encerrar a busca, fechamos a transação
+
+@example
+END;
+@end example
+
+Após o encerramento da transação, o cursor não existe mais:
+
+@example
+FETCH NEXT FROM cur_teste;
+
+ERROR:  cursor "cur_teste" does not exist
+@end example
+

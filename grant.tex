@@ -1,0 +1,9 @@
+ test=> CREATE VIEW customer_ohio AS                 
+        test-> SELECT * 
+        test-> FROM customer 
+        test-> WHERE state = 'OH'; 
+        CREATE 18908 1 
+        test=> 
+        test=> -- let sanders see only Ohio customers 
+        test=> GRANT SELECT ON customer_ohio TO sanders; 
+        CHANGE 

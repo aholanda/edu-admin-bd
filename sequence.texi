@@ -1,0 +1,55 @@
+@chapter Sequência
+
+Uma sequência no banco de dados PostgreSQL é criada pelo comando @code{CREATE SEQUENCE}:
+
+@example
+CREATE SEQUENCE seq_teste;
+@end example
+
+As sequências são acessadas pelas funções:
+
+@itemize
+@item @code{nextval('nome')}: retorna o próximo número disponível na sequência e atualiza o contador;
+@item @code{currval('nome')}: retorna o valor atual do contador;
+@item @code{setval('name', valor)}: atribui valor para o contador.
+@end itemize
+
+A seguir, são mostradas os usos das funções que manupulam as sequências:
+
+@example
+SELECT nextval('seq_teste');
+
+ nextval 
+---------
+       1
+(1 row)
+
+ SELECT nextval('seq_teste');
+
+ nextval 
+---------
+       2
+(1 row)
+
+SELECT currval('seq_teste');
+
+ currval 
+---------
+       2
+(1 row)
+
+SELECT setval('seq_teste',128);
+
+ setval 
+--------
+    128
+(1 row)
+
+postgres=# SELECT nextval('seq_teste');
+ nextval 
+---------
+     129
+(1 row)
+
+@end example
+

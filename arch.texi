@@ -1,0 +1,105 @@
+@chapter Arquitetura de Memória e Processos
+
+ No Linux, os processos do postgres são parados e iniciados usando os comandos
+
+@example
+    $ sudo /etc/init.d/postgresql stop
+    $ sudo /etc/init.d/postgresql start
+@end example
+
+ Processos pertencentes ao postgres:
+
+@example
+    $ ps ax |grep postgres
+@end example
+
+@noindent Pesquise qual a função pertence a cada processo.
+
+ Hierarquia dos processos pertecentes ao postgres:
+
+@example
+    $ pstree -p |grep postgres
+@end example
+
+@noindent Associar com os processos (funções) listados pelo comando @code{ps}.
+
+ Memória compartilhada usada pelo postgres:
+
+@example
+     $ sudo ipcs -m | grep postgres
+@end example
+
+@noindent Entender cada valor das colunas da saída.
+
+ Para visualizar os diretórios pertecentes ao postgres, é necessário se
+conectar como usuário @emph{postgres}
+
+@example
+    $ sudo su - postgres
+@end example
+
+É possível visualizar a estrutura de diretórios do postgres:
+
+@example
+    $ cd /var/lib/postgresql/@value{pgversion}/main/ ; ls
+@end example
+
+ Os bancos de dados localizam-se no diretório @code{base/}:
+
+@example
+    $ cd base/ ; ls 
+@end example
+
+ Conseguiremos visualizar a estrutura de páginas (arquivos) que é
+mapeada na memória compartilhada:
+
+@example
+    $ ls -lh 1/ 
+@end example
+
+ Conexão local no banco de dados @emph{postgres} com o usuário @emph{postgres}.
+
+@example
+    $ psql
+@end example
+
+ Parâmetros do postgres em tempo de execução
+
+@example
+     show all;
+@end example
+
+ Diretório em que são armazenada para um determinado banco de dados
+
+@example
+     SELECT oid from pg_database where datname = 'template0';
+@end example
+
+ Dúvidas sobre os comandos do @code{psql}
+
+@example
+     @backslashchar{}?
+@end example
+
+ Dúvidas sobre comandos SQL ou relacionados
+
+@example
+     @backslashchar{}h
+@end example
+
+ Relação entre as tabelas e páginas (arquivos)
+
+@example
+SELECT cl.relfilenode, nsp.nspname 
+    AS schema_name, cl.relname, cl.relkind
+    FROM pg_class cl join pg_namespace nsp 
+    ON cl.relnamespace = nsp.oid;
+@end example
+
+ Criar banco de dados e tabela e verificar as páginas criadas no sistema de arquivos
+
+@example
+     CREATE DATABASE testdb;
+     @backslashchar{}c testdb
+     CREATE TABLE foo(id SERIAL, nome VARCHAR(16));
+@end example

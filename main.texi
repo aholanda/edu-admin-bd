@@ -1,0 +1,87 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@documentencoding UTF-8
+@documentlanguage pt
+@fonttextsize 11
+@settitle Banco de Dados usando PostgreSQL 
+@c %**end of header
+
+@c Definition of variables
+@set pg PostgreSQL
+@set pgversion 9.5
+@set urlbase http://holanda.xyz/book/bd
+@set year 2017
+@set dbname empresa
+@set login aluno
+@set prompt =>
+
+@titlepage
+@title Banco de dados usando PostgreSQL (v.20171123)
+@author Adriano J. Holanda (@email{ajholanda@@gmail.com})
+@page
+@vskip 0pt plus 1filll
+@c @insertcopying
+@end titlepage
+
+@contents
+
+@include arch.texi
+@include SQLBasic.texi
+@include SQLComplex.texi
+@include trigger.texi
+@include func.texi
+@include lock.texi
+@include index.texi
+
+@unnumbered Bibliografia
+
+@itemize @bullet
+@item
+Ramez Elmasri, Shamkant B. Navathe. Sistemas de Banco de Dados. Pearson,
+6@sup{a.} edição, 2010.
+@item
+Célio Cardoso Guimarães. Fundamentos de bancos de dados: Modelagem,
+projeto e linguagem SQL.  Editora da Unicamp, 2003.
+@end itemize
+
+@bye
+
+@c ****************************************************************
+@c Conteúdo de administração de banco de dados
+
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@documentencoding UTF-8
+@documentlanguage pt
+@fonttextsize 11
+@settitle Administração de Banco de Dados usando PostgreSQL
+@c %**end of header
+
+@c Definition of variables
+@set pg PostgreSQL
+@set urlbase http://holanda.xyz/dba
+
+@titlepage
+@title Administração de Banco de Dados usando PostgreSQL
+@author Adriano J. Holanda (@email{ajholanda@@gmail.com})
+@page
+@vskip 0pt plus 1filll
+@c @insertcopying
+@end titlepage
+
+@contents
+@include setup.texi
+@include arch.texi
+@include index.texi
+@include transaction.texi
+@include cursor.texi
+@include sequence.texi
+@include schema.texi
+@include view.texi
+
+
+@include isolation.texi
+@include func.texi
+@include trigger.texi
+@include role.texi
+@include backup.texi

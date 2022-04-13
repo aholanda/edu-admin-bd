@@ -1,0 +1,155 @@
+@chapter Esquema
+
+Um @strong{esquema} no PostgreSQL é uma forma de agrupar logicamente os objetos
+de um banco de dados (@emph{database}). Dentro de um esquema são permitidos os 
+seguintes objetos:
+
+@itemize
+@item Tabela;
+@item Índice;
+@item Visão (@emph{view});
+@item Sequência e
+@item Gatilho (@emph{trigger}).
+@end itemize
+
+Os esquemas podem ser utilizados por diversas razões, dentre elas:
+
+@itemize
+@item Permitir que vários usuários utilizem o mesmo banco de dados sem
+  interferência;
+@item Organizar os objetos de um banco de dados entre grupos lógicos;
+@item Permitir que não haja conflito de nomes entre aplicações que
+  utilizam o mesmo banco de dados. 
+@end itemize
+
+Os esquemas podem ser listados usando o comando @code{@backslashchar{}dn}:
+
+@example
+@backslashchar{}dn
+
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ public | postgres
+(1 row)
+
+@end example
+
+Quando um banco de dados é criado, um esquema chamado @code{public} é
+criado e utilizado como padrão. Como é entediante especificar toda
+hora o nome do esquema, o PostgreSQL busca os objetos de acordo com os
+esquemas de @code{search_path}:
+
+@example
+SHOW search_path;
+
+  search_path   
+----------------
+ "$user",public
+(1 row)
+
+@end example
+
+O primeiro esquema a ser procurado será um com o mesmo nome do usuário
+que acessa o banco de dados. Se este não existir, @code{public} será
+usado.
+
+@section Criando Esquemas
+
+Para a criação de um esquema, @code{CREATE SCHEMA} deve ser usado, fornecendo 
+o nome do esquema, por exemplo:
+
+@example
+CREATE SCHEMA foo;
+@end example
+
+Podemos perceber que o esquema @code{foo} foi adicionado ao banco de
+dados atual:
+
+@example
+@backslashchar{}dn
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ foo    | postgres
+ public | postgres
+(2 rows)
+
+@end example
+
+Para criar ou acessar objetos em um esquema, o nome do esquema deve ser inserido antes do 
+nome do objeto, separados por ponto:
+
+@example
+CREATE TABLE foo.t_teste(id int4);
+@end example
+
+O nome do esquema deve sempre ser adicionado antes do nome da tabela
+@code{foo} para acessá-la:
+
+@example
+INSERT INTO foo.t_teste SELECT * FROM generate_series(1, 1000);
+@end example
+
+Se tentarmos listar o conteúdo da tabela sem o esquema obteremos:
+
+@example
+SELECT COUNT(*) FROM t_teste;
+
+ERROR:  relation "t_teste" does not exist
+LINE 1: SELECT * FROM t_teste;
+                      ^
+@end example
+
+A tabela @code{t_teste} deve ser acessada usando o nome do esquema
+como caminho:
+
+@example
+SELECT COUNT(*) FROM foo.t_teste;
+
+ count 
+-------
+  1000
+(1 row)
+
+@end example
+
+Para manter conformidade com o padrão SQL, o nome do banco de dados,
+no caso @code{postgres}, pode ser adicionado antes do nome do esquema,
+separado por ponto:
+
+@example
+SELECT COUNT(*) FROM postgres.foo.t_teste;
+
+ count 
+-------
+  1000
+(1 row)
+
+@end example
+
+Para remover um esquema o comando @code{DROP SCHEMA} deve ser usado, 
+porém o esquema não deve conter objetos:
+
+@example
+DROP SCHEMA foo;
+
+ERROR:  cannot drop schema foo because other objects depend on it
+DETAIL:  table foo.t_teste depends on schema foo
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+
+@end example
+
+Para remover o esquema e os objetos o comando @code{CASCADE} deve ser adicionado:
+
+@example
+DROP SCHEMA foo CASCADE;
+
+NOTICE:  drop cascades to table foo.t_teste
+@end example
+
+@unnumberedsec Referências
+
+ Para obter mais informações a respeito dos
+esquemas o manual do PostgreSQL (@uref{http://goo.gl/08q26U}) pode ser
+consultado.

@@ -1,0 +1,189 @@
+@chapter Transação
+
+O modelo de transação do PostgreSQL considera que as operações ocorrem
+entre @code{BEGIN} e @code{COMMIT} e marcação de tempo para a transação
+começa após @code{BEGIN}. Como exemplo, executamos a função @code{now()}
+em tempos diferentes e o tempo retornado durante a transação é o valor
+de que ela iniciou:
+
+@example
+BEGIN;
+SELECT now();
+
+              now              
+-------------------------------
+ 2015-09-04 13:29:06.460163-03
+(1 row)
+
+SELECT now();
+
+              now              
+-------------------------------
+ 2015-09-04 13:29:06.460163-03
+(1 row)
+
+COMMIT;
+@end example
+
+Outro aspecto importante é que qualquer erro cancela a transação, e
+por padrão, as operações já executadas após @code{BEGIN}:
+
+@example
+BEGIN;
+SELECT 1;
+
+ ?column? 
+----------
+        1
+(1 row)
+
+SELECT 1/0;
+
+ERROR:  division by zero
+SELECT 1;
+ERROR:  current transaction is aborted, 
+        commands ignored until end of transaction block
+
+COMMIT;
+@end example
+
+@noindent Após a divisão por zero, a transação é abortada e fica a
+espera do @code{COMMIT}.
+
+@section @emph{Savepoints}
+
+Um forma de se recuperar de erros, e voltar em algum ponto da
+transação é através do uso do comando @code{SAVEPOINT}:
+
+@example
+BEGIN;
+SELECT 1;
+
+ ?column? 
+----------
+        1
+(1 row)
+
+SAVEPOINT s1;
+
+ SELECT 1/0;
+
+ERROR:  division by zero
+
+ROLLBACK TO SAVEPOINT s1;
+
+SELECT 1;
+ ?column? 
+----------
+        1
+(1 row)
+
+COMMIT;
+@end example
+
+@noindent O comando @code{ROLLBACK TO SAVEPOINT s1} retorna a transação
+para o ponto @code{s1}, quando ainda não havia ocorrido o erro de
+divisão por zero.
+
+@section Bloqueio e @emph{Deadlocks}
+
+No PostgreSQL ocorre bloqueio durante as transações, para que haja
+consistência nas operações concorrentes. Por exemplo ao criarmos um
+tabela com um único campo @code{id} como mostrado a seguir:
+
+@example
+CREATE TABLE bar AS SELECT 1 as id;
+@end example
+
+@noindent E duas operações tentarem modificar o valor de @code{id}
+dentro da transação, como no exemplo mostrado a seguir. A segunda
+operação, que ocorre depois da primeira, só conseguirá atualizar o
+valor do campo @code{id} após a primeira transação tiver encerrado.
+
+@example
+@multitable @columnfractions .48 .48
+@headitem -- transação 1 @tab  -- transação 2
+@item BEGIN;
+@tab
+@item
+@tab BEGIN;
+@item UPDATE bar SET id=id+1; 
+@tab
+@item
+@tab UPDATE bar SET id=id+1;
+@item
+@tab -- espera
+@item
+@tab -- espera
+@item
+@tab -- espera
+@item COMMIT; 
+@tab -- fim da espera
+@item
+@tab COMMIT;
+@end multitable
+@end example
+
+Para verificar como pode ocorrer @emph{deadlock}, vamos criar 
+uma tabela chamada @code{custo} e inserir dois valores para os 
+@code{id}s @code{1} e @code{2}:
+
+@example
+CREATE TABLE custo(id INTEGER, valor INTEGER);
+INSERT INTO custo VALUES (1, 300);
+INSERT INTO custo VALUES (2, 500);
+@end example
+
+Vamos realizar duas transações, na transação A vamos transferir 100
+unidades do @code{id} 1 para o @code{2}, e na transação B transferir 150
+unidades do @code{id} @code{2} para o @code{id} @code{1}. Como as
+operações são realizadas concorrentemente, haverá @emph{deadlock}
+quando a transação B tentar bloquear @code{1} que já está bloqueado
+pela transação A, e o sistema notar que a transação A está esperando o
+desbloqueio de 2, que está bloqueado pela transação B.
+
+@example
+@multitable @columnfractions .48 .48
+@headitem -- transação A @tab -- transação B
+@item BEGIN; 
+@tab 
+@item        
+@tab BEGIN;
+@item UPDATE custo SET valor=valor-100 WHERE id = 1; 
+@tab
+@item
+@tab UPDATE custo SET valor=valor-150 WHERE id = 2;
+@item UPDATE custo SET valor=valor+100 WHERE id = 2; 
+@tab
+@item -- espera @tab
+@item -- espera @tab
+@item -- espera 
+@tab UPDATE custo SET valor=valor+150 WHERE id = 1;
+@end multitable
+
+ERROR:  deadlock detected
+DETAIL:  Process 6633 waits for ShareLock on transaction 11960; blocked by process 7735.
+Process 7735 waits for ShareLock on transaction 11961; blocked by process 6633.
+HINT:  See server log for query details.
+@end example
+
+O @emph{deadlock} pode ser evitado pelo uso de bloqueio da tabela com
+o comando @code{LOCK} que apresenta várias possibilidades para o
+controle do bloqueio. O comando a seguir mostra as possibilidades de
+bloqueio:
+
+@example
+@backslashchar{}h LOCK
+
+Command:     LOCK
+Description: lock a table
+Syntax:
+LOCK [ TABLE ] [ ONLY ] name [ * ] [, ...] [ IN lockmode MODE ] [ NOWAIT ]
+
+where lockmode is one of:
+
+    ACCESS SHARE | ROW SHARE | ROW EXCLUSIVE | SHARE UPDATE EXCLUSIVE
+    | SHARE | SHARE ROW EXCLUSIVE | EXCLUSIVE | ACCESS EXCLUSIVE
+
+@end example
+
